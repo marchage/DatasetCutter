@@ -40,7 +40,19 @@ brew install ffmpeg
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+```
+
+Dev options:
+
+- Quick dev server (reload):
+```bash
+python -m uvicorn app.main:app --reload --port 8000
+```
+
+- Full launcher (same as the .app): picks a free port, opens your browser, supports graceful quit; you can also show the native window in dev:
+```bash
+export SHOW_WINDOW=1   # optional; shows the small macOS window in dev
+python entry.py
 ```
 
 Then open http://127.0.0.1:8000 in your browser.
@@ -73,9 +85,15 @@ open "dist/Dataset Cutter.app"
 ```
 
 Notes:
-- The .app runs headless (server + browser). A Dock icon may appear briefly and close; this is expected.
-- A “Quit Server” button is in the UI header to stop the background server.
+- The .app shows a small macOS window with two buttons:
+  - Open UI: opens the browser to the local server URL
+  - Quit Server: gracefully shuts down the server and closes the app
+- The window displays the exact URL (port may differ if 8000 is in use).
 - The launcher prefers `~/DatasetCutter/bin/ffmpeg` when present.
+
+### App window in dev
+
+You can show the same small window while developing by setting `SHOW_WINDOW=1` and running `python entry.py`.
 
 ## Troubleshooting
 
@@ -84,6 +102,34 @@ Notes:
 - If labeling dialog doesn’t pop, click inside the page once (to ensure the page has focus) and try Space again.
 - On macOS, Homebrew ffmpeg can break due to missing dylibs (e.g., `libjxl`). Using a static ffmpeg in `~/DatasetCutter/bin/ffmpeg` avoids this.
 - Check logs in `~/DatasetCutter/data/server.log` for ffmpeg path and errors.
+
+### Port already in use
+
+- The dev command `uvicorn ... --port 8000` will fail if 8000 is used. Either kill the other process or pick a different port.
+- The launcher `python entry.py` automatically finds the next free port starting at 8000 and shows it in the window.
+
+### Graceful quit
+
+- The native window’s “Quit Server” requests a graceful shutdown; the process exits cleanly.
+- From the browser UI, the “Quit Server” button does the same via `/api/quit`.
+
+### Virtualenv mismatch (bad interpreter)
+
+- If you moved/renamed folders after creating `.venv`, recreate it:
+```bash
+rm -rf .venv
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+### Diagnostics
+
+Run the helper script:
+```bash
+./bin/doctor.sh
+```
+It reports Python/venv, ffmpeg availability, and the last server log lines.
 
 ## Privacy
 
