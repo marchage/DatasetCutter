@@ -88,7 +88,3 @@ Notes:
 ## Privacy
 
 Everything runs locally. Videos and clips are stored under `~/DatasetCutter` by default (unless you change paths).
-
-## License
-
-MIT
