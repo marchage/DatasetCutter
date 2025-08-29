@@ -1,0 +1,342 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MP4 Dataset Cutter</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <h1>MP4 Dataset Cutter</h1>
+        <div class="settings">
+          <label>
+            Dataset Root:
+            <input type="text" id="datasetRoot" placeholder="dataset/" />
+          </label>
+          <label>
+            Clip Duration (s):
+            <input type="number" id="clipDuration" min="0.5" step="0.1" value="2.0" />
+          </label>
+          <label title="Backward: last N seconds ending at the current time. Centered: N/2 before and after. Range: uses I/O marks.">
+            Mode:
+            <select id="clipMode">
+              <option value="backward">Past N sec (end at cursor)</option>
+              <option value="centered">Centered (±N/2)</option>
+              <option value="range">In/Out range</option>
+            </select>
+          </label>
+          <label>
+            Native controls
+            <input type="checkbox" id="toggleControls" />
+          </label>
+          <button id="saveSettings">Save</button>
+          <button id="quitServer" title="Stop the local DatasetCutter server">Quit Server</button>
+        </div>
+      </header>
+
+      <main>
+        <section class="left">
+          <div class="video-controls">
+            <input type="file" id="fileInput" accept="video/mp4,video/quicktime,video/*" />
+            <button id="openBtn">Open Video</button>
+            <select id="videoList"></select>
+            <span id="fileName"></span>
+          </div>
+
+          <div class="player">
+            <video id="player" preload="metadata"></video>
+            <div class="timeline">
+              <input type="range" id="seek" min="0" max="1000" value="0" />
+              <div class="marks">
+                <span id="timeLabel">00:00.00 / 00:00.00</span>
+                <span id="markIn">I: --</span>
+                <span id="markOut">O: --</span>
+              </div>
+            </div>
+            <div class="buttons">
+              <button id="btnBack">-1s</button>
+              <button id="btnBackSmall">-0.25s</button>
+              <button id="btnPlay">Play/Pause</button>
+              <button id="btnFwdSmall">+0.25s</button>
+              <button id="btnFwd">+1s</button>
+              <button id="btnSpeed">1.0x</button>
+              <button id="btnSetIn">Set In (I)</button>
+              <button id="btnSetOut">Set Out (O)</button>
+              <button id="btnClipRange">Clip Range (C)</button>
+              <button id="btnUndo">Undo</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="right">
+          <div class="labeling">
+            <h3>Label</h3>
+            <input id="labelInput" placeholder="Type a label" list="labelsDatalist" />
+            <datalist id="labelsDatalist"></datalist>
+            <div id="quickLabels"></div>
+            <div class="hint">Hotkeys: 1–9 export instantly using the first 9 labels below.</div>
+          </div>
+          <div class="log" id="log"></div>
+        </section>
+      </main>
+
+      <footer>
+        <p>Shortcuts: Space = clip; 1–9 = clip with mapped label; ←/→ = seek 0.25s (Shift=1s); J/K/L = 0.5x/1x/1.5x; U=Undo; I/O=Mark; C=Clip range.</p>
+      </footer>
+    </div>
+
+    <script>
+      const settings = { dataset_root: '', clip_duration: 2.0, clip_mode: 'backward' };
+      const el = (id) => document.getElementById(id);
+      const player = el('player');
+      const seek = el('seek');
+      const labelInput = el('labelInput');
+      const timeLabel = el('timeLabel');
+      const fileName = el('fileName');
+
+      let currentVideo = null;
+      let lastLabels = [];
+      let markIn = null, markOut = null;
+      let isSeeking = false;
+      let wasPlaying = false;
+
+      function fmt(t) {
+        if (!isFinite(t)) return '00:00.00';
+        const m = Math.floor(t / 60);
+        const s = Math.floor(t % 60);
+        const cs = Math.floor((t * 100) % 100);
+        return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${String(cs).padStart(2,'0')}`;
+      }
+
+      async function fetchSettings() {
+        const r = await fetch('/api/settings');
+        const s = await r.json();
+        settings.dataset_root = s.dataset_root;
+        settings.clip_duration = s.clip_duration;
+        settings.clip_mode = s.clip_mode;
+        el('datasetRoot').value = settings.dataset_root;
+        el('clipDuration').value = settings.clip_duration;
+        el('clipMode').value = settings.clip_mode;
+      }
+      async function saveSettings() {
+        const fd = new FormData();
+        fd.append('dataset_root', el('datasetRoot').value);
+        fd.append('clip_duration', el('clipDuration').value);
+        fd.append('clip_mode', el('clipMode').value);
+        const r = await fetch('/api/settings', { method: 'POST', body: fd });
+        const s = await r.json();
+        settings.dataset_root = s.dataset_root;
+        settings.clip_duration = s.clip_duration;
+        settings.clip_mode = s.clip_mode;
+        log(`Saved settings`);
+      }
+
+      function log(msg) {
+        const n = document.createElement('div');
+        n.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        el('log').prepend(n);
+      }
+
+      function renderQuickLabels() {
+        const dl = el('labelsDatalist');
+        dl.innerHTML = '';
+        el('quickLabels').innerHTML = '';
+        lastLabels.forEach((l, idx) => {
+          const o = document.createElement('option');
+          o.value = l; dl.appendChild(o);
+          const b = document.createElement('button');
+          const hot = idx < 9 ? ` [${idx+1}]` : '';
+          b.textContent = `${l}${hot}`;
+          b.title = idx < 9 ? `Press ${idx+1} to export clip with label "${l}"` : l;
+          b.onclick = () => { labelInput.value = l; };
+          el('quickLabels').appendChild(b);
+        });
+      }
+
+      async function refreshLabels() {
+        const r = await fetch('/api/labels');
+        const j = await r.json();
+        lastLabels = j.labels || [];
+        renderQuickLabels();
+      }
+
+      async function refreshVideos() {
+        const r = await fetch('/api/videos');
+        const j = await r.json();
+        const list = el('videoList');
+        list.innerHTML = '';
+        j.videos.forEach(v => {
+          const opt = document.createElement('option');
+          opt.value = v; opt.textContent = v; list.appendChild(opt);
+        });
+        if (j.videos.length && !currentVideo) {
+          loadVideo(j.videos[0]);
+        }
+      }
+
+      function loadVideo(name) {
+        currentVideo = name;
+        fileName.textContent = name;
+        player.src = `/videos/${encodeURIComponent(name)}`;
+        player.load();
+        player.onloadedmetadata = () => {
+          updateSeekFromVideo();
+          updateTimeLabel();
+        }
+      }
+
+      function updateSeekFromVideo() {
+        if (!player.duration || !isFinite(player.duration)) return;
+        if (isSeeking) return; // don't fight user dragging
+        const v = Math.round((player.currentTime / player.duration) * 1000);
+        seek.value = String(isFinite(v) ? v : 0);
+      }
+      function updateVideoFromSeek() {
+        if (!player.duration || !isFinite(player.duration)) return;
+        const t = (Number(seek.value) / 1000) * player.duration;
+        if (isFinite(t)) player.currentTime = t;
+        updateTimeLabel();
+      }
+      function updateTimeLabel() {
+        timeLabel.textContent = `${fmt(player.currentTime)} / ${fmt(player.duration || 0)}`;
+      }
+
+      async function doClip(mode='auto', overrideLabel=null) {
+        if (!currentVideo) { log('No video loaded'); return; }
+        let chosen = overrideLabel;
+        if (!chosen) {
+          if (!labelInput.value && lastLabels.length) {
+            labelInput.value = lastLabels[lastLabels.length - 1];
+          }
+          const label = prompt('Label for this clip:', labelInput.value || '');
+          if (label == null || label.trim() === '') return; // canceled
+          chosen = label.trim();
+        }
+        labelInput.value = chosen;
+
+        const body = {
+          video_filename: currentVideo,
+          current_time: player.currentTime,
+          label: chosen,
+          in_mark: markIn,
+          out_mark: markOut,
+        };
+        const r = await fetch('/api/clip', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const j = await r.json();
+        if (j.ok) {
+          log(`Exported clip to ${j.path}`);
+          await refreshLabels();
+        } else {
+          log('Clip failed');
+        }
+      }
+
+      async function undo() {
+        const r = await fetch('/api/undo', { method: 'POST' });
+        const j = await r.json();
+        if (j.ok) log('Undid last clip');
+      }
+
+      // Event wiring
+      el('saveSettings').onclick = saveSettings;
+      el('quitServer').onclick = async () => {
+        try {
+          await fetch('/api/quit', { method: 'POST' });
+        } catch (e) {}
+        // Give the server a moment to exit
+        setTimeout(() => { window.close(); }, 200);
+      };
+      el('openBtn').onclick = async () => {
+        const f = el('fileInput').files && el('fileInput').files[0];
+        if (!f) { log('Pick a file'); return; }
+        const fd = new FormData(); fd.append('file', f);
+        const r = await fetch('/api/upload', { method: 'POST', body: fd });
+        const j = await r.json();
+        if (j.filename) {
+          log(`Uploaded ${j.filename}`);
+          await refreshVideos();
+          loadVideo(j.filename);
+        }
+      };
+      el('videoList').onchange = (e) => loadVideo(e.target.value);
+
+      // Toggle native controls for debug
+      el('toggleControls').addEventListener('change', (e) => {
+        if (e.target.checked) player.setAttribute('controls', ''); else player.removeAttribute('controls');
+      });
+
+      // Seek UI (pause while dragging, jump on click)
+      seek.addEventListener('mousedown', () => {
+        isSeeking = true;
+        wasPlaying = !player.paused;
+        if (wasPlaying) player.pause();
+      });
+      seek.addEventListener('touchstart', () => {
+        isSeeking = true; wasPlaying = !player.paused; if (wasPlaying) player.pause();
+      }, { passive: true });
+      seek.addEventListener('input', updateVideoFromSeek);
+      seek.addEventListener('mouseup', () => {
+        isSeeking = false; updateVideoFromSeek(); if (wasPlaying) player.play();
+      });
+      seek.addEventListener('touchend', () => {
+        isSeeking = false; updateVideoFromSeek(); if (wasPlaying) player.play();
+      });
+      seek.addEventListener('click', () => { updateVideoFromSeek(); });
+      player.addEventListener('timeupdate', () => { updateSeekFromVideo(); updateTimeLabel(); });
+
+      // Buttons
+      el('btnPlay').onclick = () => player.paused ? player.play() : player.pause();
+      el('btnBack').onclick = () => { player.currentTime = Math.max(0, player.currentTime - 1.0); updateSeekFromVideo(); };
+      el('btnBackSmall').onclick = () => { player.currentTime = Math.max(0, player.currentTime - 0.25); updateSeekFromVideo(); };
+      el('btnFwdSmall').onclick = () => { player.currentTime = Math.min(player.duration || 0, player.currentTime + 0.25); updateSeekFromVideo(); };
+      el('btnFwd').onclick = () => { player.currentTime = Math.min(player.duration || 0, player.currentTime + 1.0); updateSeekFromVideo(); };
+      el('btnSpeed').onclick = () => {
+        const speeds = [0.5, 1.0, 1.5, 2.0];
+        const idx = (speeds.indexOf(player.playbackRate) + 1) % speeds.length;
+        player.playbackRate = speeds[idx];
+        el('btnSpeed').textContent = `${player.playbackRate.toFixed(1)}x`;
+      };
+      el('btnSetIn').onclick = () => { markIn = player.currentTime; el('markIn').textContent = `I: ${markIn.toFixed(2)}s`; };
+      el('btnSetOut').onclick = () => { markOut = player.currentTime; el('markOut').textContent = `O: ${markOut.toFixed(2)}s`; };
+      el('btnClipRange').onclick = () => doClip('range');
+      el('btnUndo').onclick = undo;
+
+      // Keyboard shortcuts (add number hotkeys for quick export)
+      window.addEventListener('keydown', (e) => {
+        const activeTag = document.activeElement.tagName;
+        const editing = ['INPUT', 'TEXTAREA'].includes(activeTag);
+        if (!editing && e.code === 'Space') { e.preventDefault(); doClip(); return; }
+        if (editing) return;
+        if (e.code === 'ArrowLeft') { player.currentTime = Math.max(0, player.currentTime - (e.shiftKey ? 1.0 : 0.25)); return; }
+        if (e.code === 'ArrowRight') { player.currentTime = Math.min(player.duration || 0, player.currentTime + (e.shiftKey ? 1.0 : 0.25)); return; }
+        const k = e.key;
+        if (k === 'j' || k === 'J') { player.playbackRate = 0.5; el('btnSpeed').textContent = '0.5x'; return; }
+        if (k === 'k' || k === 'K') { player.playbackRate = 1.0; el('btnSpeed').textContent = '1.0x'; return; }
+        if (k === 'l' || k === 'L') { player.playbackRate = 1.5; el('btnSpeed').textContent = '1.5x'; return; }
+        if (k === 'u' || k === 'U') { undo(); return; }
+        if (k === 'i' || k === 'I') { markIn = player.currentTime; el('markIn').textContent = `I: ${markIn.toFixed(2)}s`; return; }
+        if (k === 'o' || k === 'O') { markOut = player.currentTime; el('markOut').textContent = `O: ${markOut.toFixed(2)}s`; return; }
+        if (k === 'c' || k === 'C') { doClip('range'); return; }
+        // number hotkeys 1..9
+        const num = parseInt(k, 10);
+        if (!Number.isNaN(num) && num >= 1 && num <= 9) {
+          const idx = num - 1;
+          if (lastLabels[idx]) {
+            e.preventDefault();
+            doClip('auto', lastLabels[idx]);
+          }
+        }
+      });
+
+      // Boot
+      (async function init() {
+        await fetchSettings();
+        await refreshLabels();
+        await refreshVideos();
+        player.playbackRate = 1.0; el('btnSpeed').textContent = '1.0x';
+      })();
+    </script>
+  </body>
+</html>
