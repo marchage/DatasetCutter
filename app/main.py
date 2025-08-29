@@ -78,6 +78,29 @@ VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
 CLIPS_DIR.mkdir(parents=True, exist_ok=True)
 (DEFAULT_DATASET_ROOT / "Training").mkdir(parents=True, exist_ok=True)
 
+# Filenames to exclude from listings (case-insensitive)
+EXCLUDED_META_NAMES = {
+    ".ds_store",  # macOS Finder metadata
+    "thumbs.db",  # Windows thumbnail cache
+    "ehthumbs.db",  # Windows enhanced thumbnail cache
+    "desktop.ini",  # Windows folder config
+}
+
+# Only list these video extensions in the dropdown
+ALLOWED_VIDEO_EXTS = {".mp4", ".mov", ".m4v"}
+
+def _is_listable_video(p: Path) -> bool:
+    """Return True if path is a normal user video file (not OS metadata)."""
+    if not p.is_file():
+        return False
+    name = p.name
+    low = name.lower()
+    # Exclude dotfiles, AppleDouble resource forks, and known OS metadata names
+    if name.startswith(".") or low in EXCLUDED_META_NAMES or low.startswith("._"):
+        return False
+    # Restrict by known video extensions (matches upload allow-list)
+    return p.suffix.lower() in ALLOWED_VIDEO_EXTS
+
 # Basic startup diagnostics
 try:
     with (DATA_DIR / "server.log").open("a", encoding="utf-8") as f:
@@ -198,7 +221,7 @@ async def upload_video(file: UploadFile = File(...)):
 
 @app.get("/api/videos")
 async def list_videos():
-    files = sorted([p.name for p in VIDEOS_DIR.glob("*") if p.is_file()])
+    files = sorted([p.name for p in VIDEOS_DIR.iterdir() if _is_listable_video(p)])
     return {"videos": files}
 
 
