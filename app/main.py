@@ -326,13 +326,15 @@ async def ping():
 
 @app.post("/api/quit")
 async def quit_server(background_tasks: BackgroundTasks):
-    # Respond immediately, then exit the process shortly after
+    # Respond immediately, then request a graceful shutdown via SIGTERM
     def _shutdown():
         try:
+            import signal
             time.sleep(0.2)
+            os.kill(os.getpid(), signal.SIGTERM)
         except Exception:
-            pass
-        os._exit(0)
+            # As a last resort, hard-exit to avoid hanging
+            os._exit(0)
 
     background_tasks.add_task(_shutdown)
     return {"ok": True}

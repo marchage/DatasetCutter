@@ -3,6 +3,8 @@ import sys
 import socket
 import threading
 import webbrowser
+import signal
+import time
 from pathlib import Path
 import uvicorn
 
@@ -16,6 +18,9 @@ def find_free_port(start: int, limit: int = 20) -> int:
             except OSError:
                 continue
     return start
+
+
+SERVER: uvicorn.Server | None = None
 
 
 if __name__ == '__main__':
@@ -83,15 +88,35 @@ if __name__ == '__main__':
     port = find_free_port(base_port)
     url = f"http://127.0.0.1:{port}"
     print(f"DatasetCutter server starting: {url}")
-    # Try to open the browser shortly after server starts
+
+    # Prepare uvicorn server instance so we can shut it down gracefully
+    config = uvicorn.Config(app, host='127.0.0.1', port=port, log_level="info")
+    SERVER = uvicorn.Server(config)
+
+    # Open the browser shortly after server starts
     threading.Timer(0.8, lambda: webbrowser.open(url)).start()
+
+    # Graceful shutdown on signals
+    def _handle_signal(signum, _frame):
+        print(f"Signal {signum} received; requesting shutdown...")
+        try:
+            if SERVER is not None:
+                SERVER.should_exit = True
+        except Exception:
+            pass
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            signal.signal(sig, _handle_signal)
+        except Exception:
+            pass
+
     try:
-        uvicorn.run(app, host='127.0.0.1', port=port, log_level="info")
+        SERVER.run()
     except Exception as e:
         print(f"FATAL: server failed to start: {e}")
         # Keep the process alive briefly so the Dock doesn't swallow errors immediately
         try:
-            import time
             time.sleep(2)
         except Exception:
             pass
