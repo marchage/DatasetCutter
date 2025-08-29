@@ -6,6 +6,7 @@ import webbrowser
 import signal
 import time
 from pathlib import Path
+import platform
 import uvicorn
 
 def find_free_port(start: int, limit: int = 20) -> int:
@@ -21,6 +22,7 @@ def find_free_port(start: int, limit: int = 20) -> int:
 
 
 SERVER: uvicorn.Server | None = None
+SERVER_THREAD: threading.Thread | None = None
 
 
 if __name__ == '__main__':
@@ -93,9 +95,6 @@ if __name__ == '__main__':
     config = uvicorn.Config(app, host='127.0.0.1', port=port, log_level="info")
     SERVER = uvicorn.Server(config)
 
-    # Open the browser shortly after server starts
-    threading.Timer(0.8, lambda: webbrowser.open(url)).start()
-
     # Graceful shutdown on signals
     def _handle_signal(signum, _frame):
         print(f"Signal {signum} received; requesting shutdown...")
@@ -111,12 +110,133 @@ if __name__ == '__main__':
         except Exception:
             pass
 
-    try:
-        SERVER.run()
-    except Exception as e:
-        print(f"FATAL: server failed to start: {e}")
-        # Keep the process alive briefly so the Dock doesn't swallow errors immediately
+    # Run the server in a background thread so we can show a native window
+    def _run_server():
         try:
-            time.sleep(2)
+            SERVER.run()
+        except Exception as e:
+            print(f"FATAL: server failed to start: {e}")
+    SERVER_THREAD = threading.Thread(target=_run_server, name="datasetcutter-server", daemon=True)
+    SERVER_THREAD.start()
+
+    def _wait_until_up(timeout=5.0):
+        start = time.time()
+        import urllib.request
+        while time.time() - start < timeout:
+            try:
+                with urllib.request.urlopen(f"{url}/api/ping", timeout=0.5) as r:
+                    if r.status == 200:
+                        return True
+            except Exception:
+                pass
+            time.sleep(0.1)
+        return False
+
+    _wait_until_up(5.0)
+
+    def _open_browser():
+        try:
+            webbrowser.open(url)
         except Exception:
             pass
+
+    # If we're bundled on macOS, show a small native window with Quit/Open buttons.
+    in_bundle = bool(getattr(sys, "_MEIPASS", None))
+    on_macos = platform.system() == 'Darwin'
+    show_window = on_macos and (in_bundle or os.environ.get('SHOW_WINDOW') == '1')
+
+    if show_window:
+        try:
+            from AppKit import (
+                NSApplication, NSWindow, NSButton, NSTextField, NSView,
+                NSMakeRect, NSBackingStoreBuffered,
+                NSWindowStyleMaskTitled, NSWindowStyleMaskClosable, NSWindowStyleMaskMiniaturizable,
+                NSApplicationActivationPolicyRegular,
+            )
+            from AppKit import NSApplicationActivateIgnoringOtherApps
+            import objc
+
+            class Controller(objc.lookUpClass('NSObject')):
+                def init(self):
+                    self = objc.super(Controller, self).init()
+                    self._url = url
+                    return self
+
+                def open_(self, sender):
+                    _open_browser()
+
+                def quit_(self, sender):
+                    try:
+                        if SERVER is not None:
+                            SERVER.should_exit = True
+                    except Exception:
+                        pass
+                    # Give the server a moment to exit, then terminate the app
+                    def _delayed_terminate():
+                        for _ in range(20):
+                            if SERVER is None:
+                                break
+                            if getattr(SERVER, 'should_exit', False):
+                                # best-effort wait for thread to end
+                                time.sleep(0.1)
+                            time.sleep(0.05)
+                        NSApplication.sharedApplication().terminate_(None)
+                    threading.Thread(target=_delayed_terminate, daemon=True).start()
+
+            app = NSApplication.sharedApplication()
+            app.setActivationPolicy_(NSApplicationActivationPolicyRegular)
+
+            style = (NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable)
+            window = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
+                NSMakeRect(0, 0, 520, 160), style, NSBackingStoreBuffered, False
+            )
+            window.setTitle_("Dataset Cutter")
+
+            content = window.contentView()
+            assert isinstance(content, NSView)
+
+            ctrl = Controller.alloc().init()
+
+            label = NSTextField.alloc().initWithFrame_(NSMakeRect(20, 100, 480, 24))
+            label.setStringValue_(f"Server: {url}")
+            label.setBezeled_(False)
+            label.setDrawsBackground_(False)
+            label.setEditable_(False)
+            label.setSelectable_(True)
+            content.addSubview_(label)
+
+            btn_open = NSButton.alloc().initWithFrame_(NSMakeRect(20, 50, 140, 32))
+            btn_open.setTitle_("Open UI")
+            btn_open.setTarget_(ctrl)
+            btn_open.setAction_("open:")
+            content.addSubview_(btn_open)
+
+            btn_quit = NSButton.alloc().initWithFrame_(NSMakeRect(180, 50, 140, 32))
+            btn_quit.setTitle_("Quit Server")
+            btn_quit.setTarget_(ctrl)
+            btn_quit.setAction_("quit:")
+            content.addSubview_(btn_quit)
+
+            window.center()
+            window.makeKeyAndOrderFront_(None)
+            app.activateIgnoringOtherApps_(True)
+
+            # Run the Cocoa app event loop (blocks until Quit)
+            app.run()
+        except Exception as e:
+            print(f"Window failed ({e}); opening browser instead")
+            _open_browser()
+            # Keep process alive until server thread ends (Ctrl+C or API /api/quit)
+            try:
+                while SERVER_THREAD and SERVER_THREAD.is_alive():
+                    time.sleep(0.2)
+            except KeyboardInterrupt:
+                _handle_signal(signal.SIGINT, None)
+    else:
+        # Dev or non-macOS: open browser and keep process alive
+        threading.Timer(0.8, _open_browser).start()
+        try:
+            while SERVER_THREAD and SERVER_THREAD.is_alive():
+                time.sleep(0.2)
+        except KeyboardInterrupt:
+            _handle_signal(signal.SIGINT, None)

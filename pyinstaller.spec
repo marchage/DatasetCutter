@@ -26,7 +26,7 @@ a = Analysis(
         ('app/templates', 'app/templates'),
         ('app/static', 'app/static'),
     ],
-    hiddenimports=['fastapi', 'uvicorn', 'jinja2', 'ffmpeg', 'ffmpeg._run', 'ffmpeg.nodes'],
+    hiddenimports=['fastapi', 'uvicorn', 'jinja2', 'ffmpeg', 'ffmpeg._run', 'ffmpeg.nodes', 'AppKit', 'Foundation', 'objc'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
