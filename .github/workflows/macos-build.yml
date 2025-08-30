@@ -5,16 +5,51 @@ on:
   push:
     branches: [ main ]
     tags: [ 'v*' ]
-    paths:
-      - '**.py'
-      - 'pyinstaller.spec'
-      - 'requirements.txt'
-      - 'assets/**'
-      - '.github/workflows/macos-build.yml'
+
+permissions:
+  contents: write
 
 jobs:
+  ffmpeg:
+    name: Fetch ffmpeg v8 (${{ matrix.runner }})
+    strategy:
+      matrix:
+        runner: [ macos-13, macos-14 ]  # x86_64 and arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install ffmpeg via Homebrew
+        shell: bash
+        run: |
+          set -euxo pipefail
+          brew update
+          brew install ffmpeg
+          ffmpeg -version | head -n1
+          # Ensure major version 8
+          if ! ffmpeg -version | head -n1 | grep -q "ffmpeg version 8"; then
+            echo "ffmpeg is not major version 8" >&2
+            exit 1
+          fi
+      - name: Upload ffmpeg binary artifact
+        shell: bash
+        run: |
+          set -euxo pipefail
+          arch=$(uname -m)
+          bin=$(command -v ffmpeg)
+          mkdir -p out
+          cp "$bin" out/ffmpeg
+          echo "arch=$arch"
+        # Use upload-artifact v4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-${{ runner.os }}-${{ matrix.runner }}
+          path: out/ffmpeg
+          if-no-files-found: error
+
   build:
-    runs-on: macos-13  # x86_64 runner; we'll also fetch arm64 ffmpeg
+    needs: ffmpeg
+    runs-on: macos-13  # build the app on Intel
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,22 +64,25 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pyinstaller==6.10.0
 
-      - name: Prepare ffmpeg v8 (arm64 and x86_64)
+      - name: Download ffmpeg arm64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ffmpeg-macOS-macos-14
+          path: ffmpeg-arm64
+      - name: Download ffmpeg x86_64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ffmpeg-macOS-macos-13
+          path: ffmpeg-x86_64
+
+      - name: Place ffmpeg binaries into assets tree
         shell: bash
         run: |
           set -euxo pipefail
           mkdir -p assets/ffmpeg/mac/arm64 assets/ffmpeg/mac/x86_64
-          # Download static builds for macOS; using evermeet.cx mirrors for v8
-          # x86_64
-          curl -L -o ffmpeg-x86_64.zip "https://evermeet.cx/ffmpeg/ffmpeg-8.0.zip"
-          unzip -o ffmpeg-x86_64.zip -d assets/ffmpeg/mac/x86_64
-          mv assets/ffmpeg/mac/x86_64/ffmpeg assets/ffmpeg/mac/x86_64/ffmpeg
-          chmod +x assets/ffmpeg/mac/x86_64/ffmpeg
-          # arm64
-          curl -L -o ffmpeg-arm64.zip "https://evermeet.cx/ffmpeg/ffmpeg-8.0-arm64.zip"
-          unzip -o ffmpeg-arm64.zip -d assets/ffmpeg/mac/arm64
-          mv assets/ffmpeg/mac/arm64/ffmpeg assets/ffmpeg/mac/arm64/ffmpeg
-          chmod +x assets/ffmpeg/mac/arm64/ffmpeg
+          cp ffmpeg-arm64/ffmpeg assets/ffmpeg/mac/arm64/ffmpeg
+          cp ffmpeg-x86_64/ffmpeg assets/ffmpeg/mac/x86_64/ffmpeg
+          chmod +x assets/ffmpeg/mac/arm64/ffmpeg assets/ffmpeg/mac/x86_64/ffmpeg
 
       - name: Build app
         run: |
