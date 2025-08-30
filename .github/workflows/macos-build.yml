@@ -47,7 +47,7 @@ jobs:
           path: out/ffmpeg
           if-no-files-found: error
 
-  build:
+  build-intel:
     needs: ffmpeg
     runs-on: macos-13  # build the app on Intel
     steps:
@@ -89,27 +89,100 @@ jobs:
           rm -rf build dist || true
           pyinstaller -y --clean pyinstaller.spec
 
-      - name: Zip artifacts
+      - name: Zip artifacts (x86_64)
         run: |
           cd dist
-          zip -r "DatasetCutter-macOS-app.zip" "Dataset Cutter.app"
-          zip -r "DatasetCutter-macOS-cli.zip" "DatasetCutter"
+          zip -r "DatasetCutter-macOS-app-x86_64.zip" "Dataset Cutter.app"
+          zip -r "DatasetCutter-macOS-cli-x86_64.zip" "DatasetCutter"
 
-      - name: Archive artifacts
+      - name: Upload build artifacts (x86_64)
         uses: actions/upload-artifact@v4
         with:
-          name: DatasetCutter-macOS-with-ffmpeg8
+          name: DatasetCutter-x86_64
           path: |
-            dist/DatasetCutter/**
-            dist/Dataset Cutter.app/**
+            dist/DatasetCutter-macOS-app-x86_64.zip
+            dist/DatasetCutter-macOS-cli-x86_64.zip
           if-no-files-found: error
 
-      - name: Create GitHub Release (on tag)
-        if: startsWith(github.ref, 'refs/tags/')
+  build-arm:
+    needs: ffmpeg
+    runs-on: macos-14  # build the app on Apple Silicon
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller==6.10.0
+
+      - name: Download ffmpeg arm64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ffmpeg-macOS-macos-14
+          path: ffmpeg-arm64
+      - name: Download ffmpeg x86_64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ffmpeg-macOS-macos-13
+          path: ffmpeg-x86_64
+
+      - name: Place ffmpeg binaries into assets tree
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p assets/ffmpeg/mac/arm64 assets/ffmpeg/mac/x86_64
+          cp ffmpeg-arm64/ffmpeg assets/ffmpeg/mac/arm64/ffmpeg
+          cp ffmpeg-x86_64/ffmpeg assets/ffmpeg/mac/x86_64/ffmpeg
+          chmod +x assets/ffmpeg/mac/arm64/ffmpeg assets/ffmpeg/mac/x86_64/ffmpeg
+
+      - name: Build app
+        run: |
+          rm -rf build dist || true
+          pyinstaller -y --clean pyinstaller.spec
+
+      - name: Zip artifacts (arm64)
+        run: |
+          cd dist
+          zip -r "DatasetCutter-macOS-app-arm64.zip" "Dataset Cutter.app"
+          zip -r "DatasetCutter-macOS-cli-arm64.zip" "DatasetCutter"
+
+      - name: Upload build artifacts (arm64)
+        uses: actions/upload-artifact@v4
+        with:
+          name: DatasetCutter-arm64
+          path: |
+            dist/DatasetCutter-macOS-app-arm64.zip
+            dist/DatasetCutter-macOS-cli-arm64.zip
+          if-no-files-found: error
+
+  release:
+    needs: [build-intel, build-arm]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download intel zips
+        uses: actions/download-artifact@v4
+        with:
+          name: DatasetCutter-x86_64
+          path: intel
+      - name: Download arm zips
+        uses: actions/download-artifact@v4
+        with:
+          name: DatasetCutter-arm64
+          path: arm
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           draft: false
           prerelease: false
           files: |
-            dist/DatasetCutter-macOS-app.zip
-            dist/DatasetCutter-macOS-cli.zip
+            intel/DatasetCutter-macOS-app-x86_64.zip
+            intel/DatasetCutter-macOS-cli-x86_64.zip
+            arm/DatasetCutter-macOS-app-arm64.zip
+            arm/DatasetCutter-macOS-cli-arm64.zip
