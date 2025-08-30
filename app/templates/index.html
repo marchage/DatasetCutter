@@ -86,9 +86,21 @@
     </main>
 
     <footer>
-      <p>Shortcuts: Space = clip; 1-9 = clip with mapped label; ←/→ = seek 0.25s (Shift=1s); J/K/L = 0.5x/1x/1.5x;
-        U=Undo; I/O=Mark; C=Clip range.</p>
+      <p>Shortcuts: Space = play/pause; Enter = clip; 1-9 = clip with mapped label; ←/→ = seek 0.25s (Shift=1s);
+        J/K/L = 0.5x/1x/1.5x; U=Undo; I/O=Mark; C=Clip range.</p>
     </footer>
+  </div>
+
+  <!-- Label modal (autocomplete using existing datalist) -->
+  <div id="labelModalBackdrop" class="modal-backdrop" style="display:none">
+    <div class="modal">
+      <h3>Label</h3>
+      <input id="labelModalInput" list="labelsDatalist" placeholder="Type or pick a label" />
+      <div class="modal-actions">
+        <button id="labelModalOk">OK</button>
+        <button id="labelModalCancel">Cancel</button>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -208,6 +220,43 @@
       timeLabel.textContent = `${fmt(player.currentTime)} / ${fmt(player.duration || 0)}`;
     }
 
+    function togglePlayPause() {
+      if (player.paused) player.play(); else player.pause();
+    }
+
+    function askLabel(initialValue = '') {
+      return new Promise((resolve) => {
+        const backdrop = document.getElementById('labelModalBackdrop');
+        const input = document.getElementById('labelModalInput');
+        const ok = document.getElementById('labelModalOk');
+        const cancel = document.getElementById('labelModalCancel');
+
+        let done = false;
+        const cleanup = () => {
+          if (done) return;
+          done = true;
+          backdrop.style.display = 'none';
+          input.removeEventListener('keydown', onKey);
+          ok.removeEventListener('click', onOk);
+          cancel.removeEventListener('click', onCancel);
+        };
+        const onOk = () => { const v = input.value.trim(); cleanup(); resolve(v || null); };
+        const onCancel = () => { cleanup(); resolve(null); };
+        const onKey = (e) => {
+          if (e.key === 'Enter') { e.preventDefault(); onOk(); }
+          else if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+        };
+
+        input.value = initialValue || '';
+        backdrop.style.display = 'flex';
+        input.focus();
+        input.select();
+        input.addEventListener('keydown', onKey);
+        ok.addEventListener('click', onOk);
+        cancel.addEventListener('click', onCancel);
+      });
+    }
+
     async function doClip(mode = 'auto', overrideLabel = null) {
       if (!currentVideo) { log('No video loaded'); return; }
       let chosen = overrideLabel;
@@ -215,7 +264,7 @@
         if (!labelInput.value && lastLabels.length) {
           labelInput.value = lastLabels[lastLabels.length - 1];
         }
-        const label = prompt('Label for this clip:', labelInput.value || '');
+        const label = await askLabel(labelInput.value || '');
         if (label == null || label.trim() === '') return; // canceled
         chosen = label.trim();
       }
@@ -292,7 +341,7 @@
     player.addEventListener('timeupdate', () => { updateSeekFromVideo(); updateTimeLabel(); });
 
     // Buttons
-    el('btnPlay').onclick = () => player.paused ? player.play() : player.pause();
+  el('btnPlay').onclick = () => togglePlayPause();
     el('btnBack').onclick = () => { player.currentTime = Math.max(0, player.currentTime - 1.0); updateSeekFromVideo(); };
     el('btnBackSmall').onclick = () => { player.currentTime = Math.max(0, player.currentTime - 0.25); updateSeekFromVideo(); };
     el('btnFwdSmall').onclick = () => { player.currentTime = Math.min(player.duration || 0, player.currentTime + 0.25); updateSeekFromVideo(); };
@@ -312,7 +361,8 @@
     window.addEventListener('keydown', (e) => {
       const activeTag = document.activeElement.tagName;
       const editing = ['INPUT', 'TEXTAREA'].includes(activeTag);
-      if (!editing && e.code === 'Space') { e.preventDefault(); doClip(); return; }
+      if (!editing && e.code === 'Space') { e.preventDefault(); togglePlayPause(); return; }
+      if (!editing && e.code === 'Enter') { e.preventDefault(); doClip(); return; }
       if (editing) return;
       if (e.code === 'ArrowLeft') { e.preventDefault(); player.currentTime = Math.max(0, player.currentTime - (e.shiftKey ? 1.0 : 0.25)); return; }
       if (e.code === 'ArrowRight') { e.preventDefault(); player.currentTime = Math.min(player.duration || 0, player.currentTime + (e.shiftKey ? 1.0 : 0.25)); return; }
