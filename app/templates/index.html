@@ -309,8 +309,8 @@
         const editing = ['INPUT', 'TEXTAREA'].includes(activeTag);
         if (!editing && e.code === 'Space') { e.preventDefault(); doClip(); return; }
         if (editing) return;
-        if (e.code === 'ArrowLeft') { player.currentTime = Math.max(0, player.currentTime - (e.shiftKey ? 1.0 : 0.25)); return; }
-        if (e.code === 'ArrowRight') { player.currentTime = Math.min(player.duration || 0, player.currentTime + (e.shiftKey ? 1.0 : 0.25)); return; }
+  if (e.code === 'ArrowLeft') { e.preventDefault(); player.currentTime = Math.max(0, player.currentTime - (e.shiftKey ? 1.0 : 0.25)); return; }
+  if (e.code === 'ArrowRight') { e.preventDefault(); player.currentTime = Math.min(player.duration || 0, player.currentTime + (e.shiftKey ? 1.0 : 0.25)); return; }
         const k = e.key;
         if (k === 'j' || k === 'J') { player.playbackRate = 0.5; el('btnSpeed').textContent = '0.5x'; return; }
         if (k === 'k' || k === 'K') { player.playbackRate = 1.0; el('btnSpeed').textContent = '1.0x'; return; }
