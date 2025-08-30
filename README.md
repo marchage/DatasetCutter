@@ -3,7 +3,8 @@
 A lightweight local web app to speed up dataset creation:
 
 - Play MP4 videos, scrub the timeline, and use handy shortcuts.
-- Press Space to cut a 2-second clip (configurable) around the current time.
+- Press Enter to export a 4-second clip (configurable) around the current time.
+- Press Space to play/pause like QuickTime.
 - Prompt for a label (autocomplete from previous labels), then export into a Create ML Action Classifier folder structure: `DatasetRoot/Training/<Label>/<clip>.mp4`.
 - Quick undo for the last exported clip.
 
@@ -13,15 +14,27 @@ Runs locally on macOS (or any OS with Python + ffmpeg). Default data lives in `~
 
 - Video upload and playback with scrubbing.
 - Keyboard shortcuts:
-  - Space: Cut clip and prompt for label
+  - Space: Play/Pause
+  - Enter: Export clip and prompt for label
   - Left/Right: Seek ±0.25s (hold Shift for ±1s)
-  - J/K/L: 0.5x / 1x (toggle) / 1.5x speed
+  - J/K/L: 0.5x / 1.0x / 1.5x speed
   - U: Undo last exported clip
   - C: Clip between in/out marks (if set)
   - I/O: Set mark-in / mark-out
 - Clip mode: last N seconds or centered on current time
 - Label autocomplete from previously used labels; quick-label buttons
 - Create ML Action Classifier folder layout (video-based): `Training/<Label>/*.mp4`
+
+## Download (macOS)
+
+Grab a prebuilt app from GitHub Releases (ffmpeg 8 bundled for both Intel and Apple Silicon):
+
+- DatasetCutter-macOS-app-arm64.zip → Apple Silicon (M1/M2/M3)
+- DatasetCutter-macOS-app-x86_64.zip → Intel (or Apple Silicon via Rosetta)
+
+Unzip and run “Dataset Cutter.app”. On first launch macOS may warn because it’s unsigned; right-click → Open to proceed.
+
+CLI bundles are also attached (…-cli-<arch>.zip) if you prefer the onedir build.
 
 ## Requirements
 
@@ -90,10 +103,11 @@ Notes:
   - Quit Server: gracefully shuts down the server and closes the app
 - The window displays the exact URL (port may differ if 8000 is in use).
 - The launcher prefers `~/DatasetCutter/bin/ffmpeg` when present.
+- Release builds bundle ffmpeg v8 for both arm64 and x86_64 and pick the right one at runtime.
 
 ### Bundling ffmpeg into the .app (optional)
 
-If you want a single .app that runs without any system ffmpeg, you can bundle a binary into the app:
+If you build locally and want the .app to run without system ffmpeg, bundle binaries like so:
 
 1) Place a platform-appropriate ffmpeg binary at:
 
@@ -113,6 +127,25 @@ If you want a single .app that runs without any system ffmpeg, you can bundle a 
 ```
 
 At runtime, the app will prefer the bundled ffmpeg. If missing, it falls back to `~/DatasetCutter/bin/ffmpeg`, then PATH.
+
+## Releases (CI)
+
+Pushing a tag like `v1.0.0` triggers GitHub Actions to:
+
+1) Build native .apps on Intel and Apple Silicon runners
+2) Bundle ffmpeg v8 for both architectures
+3) Publish a GitHub Release with four assets:
+  - DatasetCutter-macOS-app-arm64.zip
+  - DatasetCutter-macOS-app-x86_64.zip
+  - DatasetCutter-macOS-cli-arm64.zip
+  - DatasetCutter-macOS-cli-x86_64.zip
+
+Create and push a tag:
+
+```bash
+git tag -a v1.0.0 -m "Release v1.0.0"
+git push origin v1.0.0
+```
 
 ### App window in dev
 
