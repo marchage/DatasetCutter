@@ -3,6 +3,7 @@
 block_cipher = None
 
 import os
+import platform
 import sysconfig
 
 # Ensure the Python shared library is bundled (macOS framework build)
@@ -18,6 +19,20 @@ except Exception:
     pass
 
 
+# Optional extra datas
+_extra_datas = []
+try:
+    _arch = platform.machine()
+    _ff_src = None
+    if _arch in ('x86_64', 'arm64'):
+        candidate = os.path.join('assets', 'ffmpeg', 'mac', _arch, 'ffmpeg')
+        if os.path.exists(candidate):
+            _ff_src = candidate
+    if _ff_src:
+        _extra_datas.append((_ff_src, 'app/bin'))
+except Exception:
+    pass
+
 a = Analysis(
     ['entry.py'],
     pathex=[],
@@ -25,7 +40,7 @@ a = Analysis(
     datas=[
         ('app/templates', 'app/templates'),
         ('app/static', 'app/static'),
-    ],
+    ] + _extra_datas,
     hiddenimports=['fastapi', 'uvicorn', 'jinja2', 'ffmpeg', 'ffmpeg._run', 'ffmpeg.nodes', 'AppKit', 'Foundation', 'objc'],
     hookspath=[],
     hooksconfig={},

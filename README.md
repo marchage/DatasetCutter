@@ -91,6 +91,29 @@ Notes:
 - The window displays the exact URL (port may differ if 8000 is in use).
 - The launcher prefers `~/DatasetCutter/bin/ffmpeg` when present.
 
+### Bundling ffmpeg into the .app (optional)
+
+If you want a single .app that runs without any system ffmpeg, you can bundle a binary into the app:
+
+1) Place a platform-appropriate ffmpeg binary at:
+
+  - macOS Intel:  `assets/ffmpeg/mac/x86_64/ffmpeg`
+  - macOS Apple:  `assets/ffmpeg/mac/arm64/ffmpeg`
+
+  Make sure it’s executable:
+
+  ```bash
+  chmod +x assets/ffmpeg/mac/*/ffmpeg
+  ```
+
+2) Rebuild:
+
+```bash
+./bin/build-app.sh
+```
+
+At runtime, the app will prefer the bundled ffmpeg. If missing, it falls back to `~/DatasetCutter/bin/ffmpeg`, then PATH.
+
 ### App window in dev
 
 You can show the same small window while developing by setting `SHOW_WINDOW=1` and running `python entry.py`.

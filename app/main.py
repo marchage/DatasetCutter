@@ -24,6 +24,13 @@ def _ensure_ffmpeg_in_path() -> None:
     env_bin = os.environ.get("FFMPEG_BINARY")
     if env_bin:
         candidates.append(env_bin)
+    # Bundled ffmpeg inside the app (PyInstaller)
+    try:
+        if getattr(sys, "_MEIPASS", None):
+            # app/bin/ffmpeg was copied as data
+            candidates.append(str(APP_ROOT / "app" / "bin" / "ffmpeg"))
+    except Exception:
+        pass
     # User-local static ffmpeg (preferred fallback)
     try:
         candidates.append(str(Path.home() / "DatasetCutter" / "bin" / "ffmpeg"))
