@@ -38,13 +38,25 @@ CLI bundles are also attached (…-cli-<arch>.zip) if you prefer the onedir buil
 
 ## Requirements
 
-- Python 3.9+
-- ffmpeg. Recommended: a static ffmpeg at `~/DatasetCutter/bin/ffmpeg` (preferred automatically). Otherwise, ensure `ffmpeg` is on your PATH.
+- Using the prebuilt macOS app from Releases: no extra install needed. ffmpeg v8 is bundled for both Intel and Apple Silicon and is auto-selected at runtime.
+- Running from source (dev): Python 3.9+ and ffmpeg available locally.
 
-On macOS you can install ffmpeg via Homebrew:
+ffmpeg discovery order at runtime:
+1) Bundled app binary: `app/bin/<arch>/ffmpeg` (inside the .app)
+2) User-local: `~/DatasetCutter/bin/ffmpeg`
+3) System: `/opt/homebrew/bin/ffmpeg`, `/usr/local/bin/ffmpeg`, or `ffmpeg` on PATH
+
+macOS (dev) install options:
 
 ```bash
 brew install ffmpeg
+```
+
+Or drop a static ffmpeg at `~/DatasetCutter/bin/ffmpeg` and make it executable.
+There’s also a helper script:
+
+```bash
+./bin/install-ffmpeg.sh
 ```
 
 ## Setup (dev)
