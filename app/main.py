@@ -26,9 +26,18 @@ def _ensure_ffmpeg_in_path() -> None:
         candidates.append(env_bin)
     # Bundled ffmpeg inside the app (PyInstaller)
     try:
-        if getattr(sys, "_MEIPASS", None):
-            # app/bin/ffmpeg was copied as data
-            candidates.append(str(APP_ROOT / "app" / "bin" / "ffmpeg"))
+        # Compute a local app root (works before APP_ROOT global is set)
+        from pathlib import Path as _Path
+        _bundle_root = getattr(sys, "_MEIPASS", None)
+        app_root_local = _Path(_bundle_root) if _bundle_root else _Path(__file__).resolve().parent.parent
+        # Prefer arch-specific dirs when bundled
+        import platform as _plat
+        arch = _plat.machine()
+        appbin = app_root_local / "app" / "bin"
+        if arch:
+            candidates.append(str(appbin / arch / "ffmpeg"))
+        # Fallbacks
+        candidates.append(str(appbin / "ffmpeg"))
     except Exception:
         pass
     # User-local static ffmpeg (preferred fallback)

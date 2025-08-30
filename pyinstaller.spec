@@ -22,14 +22,12 @@ except Exception:
 # Optional extra datas
 _extra_datas = []
 try:
-    _arch = platform.machine()
-    _ff_src = None
-    if _arch in ('x86_64', 'arm64'):
-        candidate = os.path.join('assets', 'ffmpeg', 'mac', _arch, 'ffmpeg')
+    # Include both arch variants if available; runtime will select the right one
+    for arch in ('arm64', 'x86_64'):
+        candidate = os.path.join('assets', 'ffmpeg', 'mac', arch, 'ffmpeg')
         if os.path.exists(candidate):
-            _ff_src = candidate
-    if _ff_src:
-        _extra_datas.append((_ff_src, 'app/bin'))
+            # Place into app/bin/<arch>/ffmpeg
+            _extra_datas.append((candidate, f'app/bin/{arch}'))
 except Exception:
     pass
 
