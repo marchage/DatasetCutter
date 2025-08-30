@@ -169,7 +169,7 @@
         list.innerHTML = '';
         j.videos.forEach(v => {
           const opt = document.createElement('option');
-          opt.value = v; opt.textContent = v; list.appendChild(opt);
+          opt.value = v; opt.textContent = v; opt.title = v; list.appendChild(opt);
         });
         if (j.videos.length && !currentVideo) {
           loadVideo(j.videos[0]);
@@ -178,7 +178,8 @@
 
       function loadVideo(name) {
         currentVideo = name;
-        fileName.textContent = name;
+  fileName.textContent = name;
+  fileName.title = name;
         player.src = `/videos/${encodeURIComponent(name)}`;
         player.load();
         player.onloadedmetadata = () => {
