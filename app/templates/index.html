@@ -11,7 +11,7 @@
 <body>
   <div id="app">
     <header>
-      <h1>MP4 Dataset Cutter</h1>
+      <h1 class="app-title">MP4 Dataset Cutter</h1>
       <div class="settings">
         <label>
           Dataset Root:
@@ -45,7 +45,16 @@
           <input type="file" id="fileInput" accept="video/mp4,video/quicktime,video/*" />
           <button id="openBtn">Open Video</button>
           <select id="videoList"></select>
-          <span id="fileName"></span>
+          <div class="shortcuts shortcuts-inline" aria-label="Keyboard shortcuts">
+            <span class="pill">Space: Play/Pause</span>
+            <span class="pill">Enter: Clip</span>
+            <span class="pill">1–9: Quick Labels</span>
+            <span class="pill">←/→: Seek ±0.25s (Shift=±1s)</span>
+            <span class="pill">J/K/L: 0.5x/1.0x/1.5x</span>
+            <span class="pill">U: Undo</span>
+            <span class="pill">I/O: Mark In/Out</span>
+            <span class="pill">C: Clip Range</span>
+          </div>
         </div>
 
         <div class="player">
@@ -86,8 +95,9 @@
     </main>
 
     <footer>
-      <p>Shortcuts: Space = play/pause; Enter = clip; 1-9 = clip with mapped label; ←/→ = seek 0.25s (Shift=1s);
-        J/K/L = 0.5x/1x/1.5x; U=Undo; I/O=Mark; C=Clip range.</p>
+      <div class="movie-title" aria-label="Current movie">
+        <span id="fileName"></span>
+      </div>
     </footer>
   </div>
 
