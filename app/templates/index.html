@@ -45,15 +45,8 @@
           <input type="file" id="fileInput" accept="video/mp4,video/quicktime,video/*" />
           <button id="openBtn">Open Video</button>
           <select id="videoList"></select>
-          <div class="shortcuts shortcuts-inline" aria-label="Keyboard shortcuts">
-            <span class="pill">Space: Play/Pause</span>
-            <span class="pill">Enter: Clip</span>
-            <span class="pill">1–9: Quick Labels</span>
-            <span class="pill">←/→: Seek ±0.25s (Shift=±1s)</span>
-            <span class="pill">J/K/L: 0.5x/1.0x/1.5x</span>
-            <span class="pill">U: Undo</span>
-            <span class="pill">I/O: Mark In/Out</span>
-            <span class="pill">C: Clip Range</span>
+          <div class="current-filename shortcuts-inline" aria-label="Current movie">
+            <span id="fileName"></span>
           </div>
         </div>
 
@@ -95,8 +88,15 @@
     </main>
 
     <footer>
-      <div class="movie-title" aria-label="Current movie">
-        <span id="fileName"></span>
+      <div class="shortcuts shortcuts-footer" aria-label="Keyboard shortcuts">
+        <span class="pill">Space: Play/Pause</span>
+        <span class="pill">Enter: Clip</span>
+        <span class="pill">1–9: Quick Labels</span>
+        <span class="pill">←/→: Seek ±0.25s (Shift=±1s)</span>
+        <span class="pill">J/K/L: 0.5x/1.0x/1.5x</span>
+        <span class="pill">U: Undo</span>
+        <span class="pill">I/O: Mark In/Out</span>
+        <span class="pill">C: Clip Range</span>
       </div>
     </footer>
   </div>
