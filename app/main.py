@@ -331,7 +331,7 @@ async def make_clip(req: ClipRequest):
             '-c:a', 'aac', '-movflags', '+faststart',
             '-y', str(out_path)
         ]
-    rc2, err2 = _run(cmd2)
+        rc2, err2 = _run(cmd2)
         if rc2 != 0:
             # Attempt 3 (macOS-friendly): use VideoToolbox hardware encoder to avoid missing libx264
             cmd3 = [
