@@ -48,8 +48,8 @@ jobs:
               cp -n "$src" out/lib/ || true
             fi
           }
-          # Collect LC_RPATH entries from the binary (used to resolve @rpath)
-          mapfile -t RPATHS < <(otool -l "$bin" \
+          # Collect LC_RPATH entries from the binary (used to resolve @rpath) — avoid bash 4-only mapfile
+          RPATHS=$(otool -l "$bin" \
             | awk 'r && /^\tname/ {gsub(/^\tname /,""); print $1} /LC_RPATH/ {r=1} /cmd / && !/LC_RPATH/ {r=0}')
           # Copy dependent dylibs referenced by absolute Homebrew paths
           otool -L "$bin" \
@@ -62,7 +62,7 @@ jobs:
                   @rpath/*)
                     name="${dep#@rpath/}"
                     # Try to resolve against each LC_RPATH
-                    for rp in "${RPATHS[@]}"; do
+                    for rp in $RPATHS; do
                       candidate="$rp/$name"
                       if [ -f "$candidate" ]; then copy_one "$candidate"; break; fi
                     done
