@@ -35,7 +35,14 @@ def _ensure_ffmpeg_in_path() -> None:
         arch = _plat.machine()
         appbin = app_root_local / "app" / "bin"
         if arch:
-            candidates.append(str(appbin / arch / "ffmpeg"))
+            # Prefer ffmpeg in app/bin/<arch>/ffmpeg and set its lib path
+            ff = appbin / arch / "ffmpeg"
+            lib = appbin / arch / "lib"
+            if ff.exists():
+                # Prepend lib dir to DYLD_LIBRARY_PATH for child processes
+                if lib.exists():
+                    os.environ["DYLD_LIBRARY_PATH"] = f"{lib}:{os.environ.get('DYLD_LIBRARY_PATH','')}"
+                candidates.append(str(ff))
         # Fallbacks
         candidates.append(str(appbin / "ffmpeg"))
     except Exception:

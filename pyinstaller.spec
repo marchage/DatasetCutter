@@ -28,6 +28,10 @@ try:
         if os.path.exists(candidate):
             # Place into app/bin/<arch>/ffmpeg
             _extra_datas.append((candidate, f'app/bin/{arch}'))
+        # Include dependent dylibs if present
+        libdir = os.path.join('assets', 'ffmpeg', 'mac', arch, 'lib')
+        if os.path.isdir(libdir):
+            _extra_datas.append((libdir, f'app/bin/{arch}/lib'))
 except Exception:
     pass
 

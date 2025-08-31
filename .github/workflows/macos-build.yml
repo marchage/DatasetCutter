@@ -37,14 +37,19 @@ jobs:
           set -euxo pipefail
           arch=$(uname -m)
           bin=$(command -v ffmpeg)
-          mkdir -p out
+          mkdir -p out out/lib
           cp "$bin" out/ffmpeg
           echo "arch=$arch"
+          # Copy dependent dylibs from Homebrew prefixes so runtime doesn't require Homebrew
+          otool -L "$bin" | awk '{print $1}' | grep -E 
+            '/opt/homebrew/|/usr/local/' | while read -r lib; do
+              if [ -f "$lib" ]; then cp -n "$lib" out/lib/; fi
+            done
         # Use upload-artifact v4
       - uses: actions/upload-artifact@v4
         with:
           name: ffmpeg-${{ runner.os }}-${{ matrix.runner }}
-          path: out/ffmpeg
+          path: out/**
           if-no-files-found: error
 
   build-intel:
@@ -81,7 +86,9 @@ jobs:
           set -euxo pipefail
           mkdir -p assets/ffmpeg/mac/arm64 assets/ffmpeg/mac/x86_64
           cp ffmpeg-arm64/ffmpeg assets/ffmpeg/mac/arm64/ffmpeg
+          cp -R ffmpeg-arm64/lib assets/ffmpeg/mac/arm64/ || true
           cp ffmpeg-x86_64/ffmpeg assets/ffmpeg/mac/x86_64/ffmpeg
+          cp -R ffmpeg-x86_64/lib assets/ffmpeg/mac/x86_64/ || true
           chmod +x assets/ffmpeg/mac/arm64/ffmpeg assets/ffmpeg/mac/x86_64/ffmpeg
 
       - name: Build app
