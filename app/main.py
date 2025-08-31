@@ -14,6 +14,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 import ffmpeg
 import subprocess
+from datetime import datetime
 
 # --- Ensure ffmpeg binary is discoverable even in bundled app (limited PATH) ---
 FFMPEG_BIN_PATH: Optional[str] = None
@@ -124,19 +125,28 @@ def _is_listable_video(p: Path) -> bool:
     # Restrict by known video extensions (matches upload allow-list)
     return p.suffix.lower() in ALLOWED_VIDEO_EXTS
 
-# Basic startup diagnostics
+def _log(msg: str) -> None:
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with (DATA_DIR / "server.log").open("a", encoding="utf-8") as f:
+            f.write(f"[{ts}] {msg}\n")
+    except Exception:
+        pass
+
+# Basic startup diagnostics (with a clear run separator)
 try:
-    with (DATA_DIR / "server.log").open("a", encoding="utf-8") as f:
-        f.write(f"START: IN_BUNDLE={IN_BUNDLE} APP_ROOT={APP_ROOT}\n")
-        f.write(f"BASE_DIR={BASE_DIR} DATA_DIR={DATA_DIR} VIDEOS_DIR={VIDEOS_DIR}\n")
-        f.write(f"PATH={os.environ.get('PATH','')}\n")
-        f.write(f"FFMPEG_BIN_PATH={FFMPEG_BIN_PATH}\n")
-        try:
-            ffbin = FFMPEG_BIN_PATH or shutil.which('ffmpeg') or 'ffmpeg'
-            ver = subprocess.run([ffbin, '-version'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=3)
-            f.write("ffmpeg -version:\n" + ver.stdout.decode(errors='replace') + "\n")
-        except Exception as _e:
-            f.write(f"ffmpeg -version failed: {_e}\n")
+    _log("===== START =====")
+    _log(f"IN_BUNDLE={IN_BUNDLE} APP_ROOT={APP_ROOT}")
+    _log(f"BASE_DIR={BASE_DIR} DATA_DIR={DATA_DIR} VIDEOS_DIR={VIDEOS_DIR}")
+    _log(f"PATH={os.environ.get('PATH','')}")
+    _log(f"FFMPEG_BIN_PATH={FFMPEG_BIN_PATH}")
+    try:
+        ffbin = FFMPEG_BIN_PATH or shutil.which('ffmpeg') or 'ffmpeg'
+        ver = subprocess.run([ffbin, '-version'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=3)
+        _log("ffmpeg -version:\n" + ver.stdout.decode(errors='replace'))
+    except Exception as _e:
+        _log(f"ffmpeg -version failed: {_e}")
 except Exception:
     pass
 
@@ -321,7 +331,7 @@ async def make_clip(req: ClipRequest):
             '-c:a', 'aac', '-movflags', '+faststart',
             '-y', str(out_path)
         ]
-        rc2, err2 = _run(cmd2)
+    rc2, err2 = _run(cmd2)
         if rc2 != 0:
             # Attempt 3 (macOS-friendly): use VideoToolbox hardware encoder to avoid missing libx264
             cmd3 = [
@@ -335,22 +345,21 @@ async def make_clip(req: ClipRequest):
             ]
             rc3, err3 = _run(cmd3)
             if rc3 != 0:
-                errlog = DATA_DIR / "server.log"
-                with errlog.open("a", encoding="utf-8") as f:
-                    f.write("ffmpeg copy cmd: " + " ".join(cmd1) + "\n")
-                    f.write("stderr1:\n" + err1 + "\n")
-                    f.write("ffmpeg reencode cmd: " + " ".join(cmd2) + "\n")
-                    f.write("stderr2:\n" + err2 + "\n")
-                    f.write("ffmpeg vt hw cmd: " + " ".join(cmd3) + "\n")
-                    f.write("stderr3:\n" + err3 + "\n")
+                _log("ffmpeg copy cmd: " + " ".join(cmd1))
+                _log("stderr1:\n" + err1)
+                _log("ffmpeg reencode cmd: " + " ".join(cmd2))
+                _log("stderr2:\n" + err2)
+                _log("ffmpeg vt hw cmd: " + " ".join(cmd3))
+                _log("stderr3:\n" + err3)
                 raise HTTPException(500, "ffmpeg failed to export clip")
 
     # Verify output exists and is non-empty
     if not out_path.exists() or out_path.stat().st_size == 0:
         raise HTTPException(500, "Clip export produced no file")
 
-    # Record undo path
+    # Record undo path and log success
     UNDO_PATH.write_text(str(out_path), encoding="utf-8")
+    _log(f"Clip OK: {out_path}")
     return {"ok": True, "path": str(out_path)}
 
 
