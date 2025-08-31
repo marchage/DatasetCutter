@@ -41,10 +41,13 @@ jobs:
           cp "$bin" out/ffmpeg
           echo "arch=$arch"
           # Copy dependent dylibs from Homebrew prefixes so runtime doesn't require Homebrew
-          otool -L "$bin" | awk '{print $1}' | grep -E 
-            '/opt/homebrew/|/usr/local/' | while read -r lib; do
-              if [ -f "$lib" ]; then cp -n "$lib" out/lib/; fi
-            done
+          # Skip first line (the binary itself), filter for Homebrew prefixes in awk to avoid grep failures with pipefail
+          otool -L "$bin" \
+            | tail -n +2 \
+            | awk '/^\/(opt\/homebrew|usr\/local)\// {print $1}' \
+            | while read -r lib; do
+                if [ -f "$lib" ]; then cp -n "$lib" out/lib/ || true; fi
+              done
         # Use upload-artifact v4
       - uses: actions/upload-artifact@v4
         with:
