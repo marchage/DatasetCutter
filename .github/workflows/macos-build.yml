@@ -40,14 +40,56 @@ jobs:
           mkdir -p out out/lib
           cp "$bin" out/ffmpeg
           echo "arch=$arch"
-          # Copy dependent dylibs from Homebrew prefixes so runtime doesn't require Homebrew
-          # Skip first line (the binary itself), filter for Homebrew prefixes in awk to avoid grep failures with pipefail
+          # Helper to copy a dylib if present
+          copy_one() {
+            local src="$1"
+            if [ -f "$src" ]; then
+              echo "copy: $src"
+              cp -n "$src" out/lib/ || true
+            fi
+          }
+          # Collect LC_RPATH entries from the binary (used to resolve @rpath)
+          mapfile -t RPATHS < <(otool -l "$bin" \
+            | awk 'r && /^\tname/ {gsub(/^\tname /,""); print $1} /LC_RPATH/ {r=1} /cmd / && !/LC_RPATH/ {r=0}')
+          # Copy dependent dylibs referenced by absolute Homebrew paths
           otool -L "$bin" \
             | tail -n +2 \
-            | awk '/^\/(opt\/homebrew|usr\/local)\// {print $1}' \
-            | while read -r lib; do
-                if [ -f "$lib" ]; then cp -n "$lib" out/lib/ || true; fi
+            | awk '{print $1}' \
+            | while read -r dep; do
+                case "$dep" in
+                  /opt/homebrew/*|/usr/local/*)
+                    copy_one "$dep" || true ;;
+                  @rpath/*)
+                    name="${dep#@rpath/}"
+                    # Try to resolve against each LC_RPATH
+                    for rp in "${RPATHS[@]}"; do
+                      candidate="$rp/$name"
+                      if [ -f "$candidate" ]; then copy_one "$candidate"; break; fi
+                    done
+                    # Fallback: try Homebrew prefix for the library by guessing formula name
+                    base="${name%%.dylib}"
+                    base="${base%%.*}"  # strip version suffix like .13
+                    if command -v brew >/dev/null 2>&1; then
+                      if prefix=$(brew --prefix "$base" 2>/dev/null || true); then
+                        [ -d "$prefix/lib" ] && for f in "$prefix"/lib/"$name" "$prefix"/lib/"$base"*.dylib; do [ -f "$f" ] && copy_one "$f"; done
+                      fi
+                    fi ;;
+                esac
               done
+          # Second pass: also copy dependencies of the just-copied libs (one level deep)
+          if ls out/lib/*.dylib >/dev/null 2>&1; then
+            for L in out/lib/*.dylib; do
+              otool -L "$L" \
+                | tail -n +2 \
+                | awk '{print $1}' \
+                | while read -r dep; do
+                    case "$dep" in
+                      /opt/homebrew/*|/usr/local/*)
+                        copy_one "$dep" || true ;;
+                    esac
+                  done
+            done
+          fi
         # Use upload-artifact v4
       - uses: actions/upload-artifact@v4
         with:
@@ -93,6 +135,9 @@ jobs:
           cp ffmpeg-x86_64/ffmpeg assets/ffmpeg/mac/x86_64/ffmpeg
           cp -R ffmpeg-x86_64/lib assets/ffmpeg/mac/x86_64/ || true
           chmod +x assets/ffmpeg/mac/arm64/ffmpeg assets/ffmpeg/mac/x86_64/ffmpeg
+          # Ensure the ffmpeg binary can resolve @rpath to our bundled lib directory at runtime
+          install_name_tool -add_rpath '@loader_path/lib' assets/ffmpeg/mac/x86_64/ffmpeg || true
+          install_name_tool -add_rpath '@loader_path/lib' assets/ffmpeg/mac/arm64/ffmpeg || true
 
       - name: Build app
         run: |
@@ -148,8 +193,12 @@ jobs:
           set -euxo pipefail
           mkdir -p assets/ffmpeg/mac/arm64 assets/ffmpeg/mac/x86_64
           cp ffmpeg-arm64/ffmpeg assets/ffmpeg/mac/arm64/ffmpeg
+          cp -R ffmpeg-arm64/lib assets/ffmpeg/mac/arm64/ || true
           cp ffmpeg-x86_64/ffmpeg assets/ffmpeg/mac/x86_64/ffmpeg
           chmod +x assets/ffmpeg/mac/arm64/ffmpeg assets/ffmpeg/mac/x86_64/ffmpeg
+          # Ensure the ffmpeg binary can resolve @rpath to our bundled lib directory at runtime
+          install_name_tool -add_rpath '@loader_path/lib' assets/ffmpeg/mac/x86_64/ffmpeg || true
+          install_name_tool -add_rpath '@loader_path/lib' assets/ffmpeg/mac/arm64/ffmpeg || true
 
       - name: Build app
         run: |
