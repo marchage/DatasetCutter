@@ -81,7 +81,8 @@
           <input id="labelInput" placeholder="Type a label" list="labelsDatalist" />
           <datalist id="labelsDatalist"></datalist>
           <div id="quickLabels"></div>
-          <div class="hint">Hotkeys: digits for quick labels (supports multi-digit like 10, 11). Type the number; it auto-commits, or press '-' / Enter to commit immediately.</div>
+          <div class="hint">Hotkeys: digits for quick labels (supports multi-digit like 10, 11). Type the number; it
+            auto-commits, or press '-' / Enter to commit immediately.</div>
         </div>
         <div class="log" id="log"></div>
       </section>
@@ -91,7 +92,7 @@
       <div class="shortcuts shortcuts-footer" aria-label="Keyboard shortcuts">
         <span class="pill">Space: Play/Pause</span>
         <span class="pill">Enter: Clip</span>
-  <span class="pill">Digits: Quick Labels (multi-digit OK)</span>
+        <span class="pill">Digits: Quick Labels (multi-digit OK)</span>
         <span class="pill">←/→: Seek ±0.25s (Shift=±1s)</span>
         <span class="pill">J/K/L: 0.5x/1.0x/1.5x</span>
         <span class="pill">U: Undo</span>
@@ -127,8 +128,8 @@
     let markIn = null, markOut = null;
     let isSeeking = false;
     let wasPlaying = false;
-  let digitBuffer = '';
-  let digitTimer = null;
+    let digitBuffer = '';
+    let digitTimer = null;
 
     function fmt(t) {
       if (!isFinite(t)) return '00:00.00';
@@ -375,7 +376,7 @@
     player.addEventListener('timeupdate', () => { updateSeekFromVideo(); updateTimeLabel(); });
 
     // Buttons
-  el('btnPlay').onclick = () => togglePlayPause();
+    el('btnPlay').onclick = () => togglePlayPause();
     el('btnBack').onclick = () => { player.currentTime = Math.max(0, player.currentTime - 1.0); updateSeekFromVideo(); };
     el('btnBackSmall').onclick = () => { player.currentTime = Math.max(0, player.currentTime - 0.25); updateSeekFromVideo(); };
     el('btnFwdSmall').onclick = () => { player.currentTime = Math.min(player.duration || 0, player.currentTime + 0.25); updateSeekFromVideo(); };
