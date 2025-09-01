@@ -190,7 +190,7 @@ class UndoState(BaseModel):
 
 SETTINGS_PATH = DATA_DIR / "settings.json"
 LABELS_PATH = DATA_DIR / "labels.txt"
-UNDO_PATH = DATA_DIR / "undo.txt"
+UNDO_PATH = DATA_DIR / "undo.txt"  # newline-delimited stack (last line = most recent)
 
 _current_settings = Settings()
 _undo_state = UndoState()
@@ -212,6 +212,42 @@ def save_label(label: str) -> None:
 def sanitize_filename(name: str) -> str:
     safe = "".join(c if c.isalnum() or c in ("-", "_", ".") else "_" for c in name)
     return safe.strip("._") or "clip"
+
+
+# --- Undo stack helpers (max depth 10) ---
+MAX_UNDO = 10
+
+def _read_undo_stack() -> List[Path]:
+    if not UNDO_PATH.exists():
+        return []
+    try:
+        lines = [l.strip() for l in UNDO_PATH.read_text(encoding="utf-8").splitlines() if l.strip()]
+        return [Path(l) for l in lines]
+    except Exception:
+        return []
+
+def _write_undo_stack(items: List[Path]) -> None:
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        text = "\n".join(str(p) for p in items[-MAX_UNDO:]) + ("\n" if items else "")
+        UNDO_PATH.write_text(text, encoding="utf-8")
+    except Exception:
+        pass
+
+def _push_undo(p: Path) -> None:
+    items = _read_undo_stack()
+    items.append(p)
+    if len(items) > MAX_UNDO:
+        items = items[-MAX_UNDO:]
+    _write_undo_stack(items)
+
+def _pop_undo() -> Optional[Path]:
+    items = _read_undo_stack()
+    if not items:
+        return None
+    last = items[-1]
+    _write_undo_stack(items[:-1])
+    return last
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -357,20 +393,24 @@ async def make_clip(req: ClipRequest):
     if not out_path.exists() or out_path.stat().st_size == 0:
         raise HTTPException(500, "Clip export produced no file")
 
-    # Record undo path and log success
-    UNDO_PATH.write_text(str(out_path), encoding="utf-8")
+    # Record undo (stack, max depth) and log success
+    _push_undo(out_path)
     _log(f"Clip OK: {out_path}")
     return {"ok": True, "path": str(out_path)}
 
 
 @app.post("/api/undo")
 async def undo_last():
-    if not UNDO_PATH.exists():
+    p = _pop_undo()
+    if not p:
         return {"ok": False}
-    p = Path(UNDO_PATH.read_text(encoding="utf-8").strip())
-    if p.exists():
-        p.unlink()
-    UNDO_PATH.unlink(missing_ok=True)
+    try:
+        if p.exists():
+            p.unlink()
+        _log(f"Undo OK: deleted {p}")
+    except Exception as e:
+        _log(f"Undo error for {p}: {e}")
+        return {"ok": False}
     return {"ok": True}
 
 
