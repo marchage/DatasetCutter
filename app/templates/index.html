@@ -81,7 +81,7 @@
           <input id="labelInput" placeholder="Type a label" list="labelsDatalist" />
           <datalist id="labelsDatalist"></datalist>
           <div id="quickLabels"></div>
-          <div class="hint">Hotkeys: 1-9 export instantly using the first 9 labels below.</div>
+          <div class="hint">Hotkeys: digits for quick labels (supports multi-digit like 10, 11). Type the number; it auto-commits, or press '-' / Enter to commit immediately.</div>
         </div>
         <div class="log" id="log"></div>
       </section>
@@ -91,7 +91,7 @@
       <div class="shortcuts shortcuts-footer" aria-label="Keyboard shortcuts">
         <span class="pill">Space: Play/Pause</span>
         <span class="pill">Enter: Clip</span>
-        <span class="pill">1–9: Quick Labels</span>
+  <span class="pill">Digits: Quick Labels (multi-digit OK)</span>
         <span class="pill">←/→: Seek ±0.25s (Shift=±1s)</span>
         <span class="pill">J/K/L: 0.5x/1.0x/1.5x</span>
         <span class="pill">U: Undo</span>
@@ -127,6 +127,8 @@
     let markIn = null, markOut = null;
     let isSeeking = false;
     let wasPlaying = false;
+  let digitBuffer = '';
+  let digitTimer = null;
 
     function fmt(t) {
       if (!isFinite(t)) return '00:00.00';
@@ -232,6 +234,28 @@
 
     function togglePlayPause() {
       if (player.paused) player.play(); else player.pause();
+    }
+
+    function commitDigitBuffer() {
+      if (!digitBuffer) return;
+      let str = digitBuffer;
+      let n = parseInt(str, 10);
+      if (str === '0') n = 10; // allow single 0 as 10th label
+      digitBuffer = '';
+      if (digitTimer) { clearTimeout(digitTimer); digitTimer = null; }
+      if (!Number.isNaN(n) && n >= 1) {
+        const idx = n - 1;
+        if (lastLabels[idx]) {
+          doClip('auto', lastLabels[idx]);
+          return;
+        }
+      }
+      log(`No quick label for index` + (str ? ` ${str}` : ''));
+    }
+
+    function scheduleDigitCommit() {
+      if (digitTimer) clearTimeout(digitTimer);
+      digitTimer = setTimeout(() => { commitDigitBuffer(); }, 600);
     }
 
     function askLabel(initialValue = '') {
@@ -372,7 +396,10 @@
       const activeTag = document.activeElement.tagName;
       const editing = ['INPUT', 'TEXTAREA'].includes(activeTag);
       if (!editing && e.code === 'Space') { e.preventDefault(); togglePlayPause(); return; }
-      if (!editing && e.code === 'Enter') { e.preventDefault(); doClip(); return; }
+      if (!editing && e.code === 'Enter') {
+        if (digitBuffer) { e.preventDefault(); commitDigitBuffer(); return; }
+        e.preventDefault(); doClip(); return;
+      }
       if (editing) return;
       if (e.code === 'ArrowLeft') { e.preventDefault(); player.currentTime = Math.max(0, player.currentTime - (e.shiftKey ? 1.0 : 0.25)); return; }
       if (e.code === 'ArrowRight') { e.preventDefault(); player.currentTime = Math.min(player.duration || 0, player.currentTime + (e.shiftKey ? 1.0 : 0.25)); return; }
@@ -384,15 +411,9 @@
       if (k === 'i' || k === 'I') { markIn = player.currentTime; el('markIn').textContent = `I: ${markIn.toFixed(2)}s`; return; }
       if (k === 'o' || k === 'O') { markOut = player.currentTime; el('markOut').textContent = `O: ${markOut.toFixed(2)}s`; return; }
       if (k === 'c' || k === 'C') { doClip('range'); return; }
-      // number hotkeys 1..9
-      const num = parseInt(k, 10);
-      if (!Number.isNaN(num) && num >= 1 && num <= 9) {
-        const idx = num - 1;
-        if (lastLabels[idx]) {
-          e.preventDefault();
-          doClip('auto', lastLabels[idx]);
-        }
-      }
+      // digit hotkeys: build a multi-digit buffer and auto-commit
+      if (k >= '0' && k <= '9') { e.preventDefault(); digitBuffer += k; scheduleDigitCommit(); return; }
+      if (k === '-' && digitBuffer) { e.preventDefault(); commitDigitBuffer(); return; }
     });
 
     // Boot
