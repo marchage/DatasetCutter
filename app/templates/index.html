@@ -459,6 +459,22 @@
     seek.addEventListener('click', () => { updateVideoFromSeek(); });
     player.addEventListener('timeupdate', () => { updateSeekFromVideo(); updateTimeLabel(); });
 
+    // Horizontal scroll on the video: scrub forward/back (like QuickTime)
+    player.addEventListener('wheel', (e) => {
+      if (!player.duration || !isFinite(player.duration)) return;
+      // Only act on horizontal intent
+      if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+      e.preventDefault(); // prevent page scroll
+      const perUnit = e.shiftKey ? 0.02 : 0.01; // seconds per delta unit (Shift = faster)
+      let t = player.currentTime - (e.deltaX * perUnit);
+      if (t < 0) t = 0;
+      const dur = player.duration || 0;
+      if (dur && t > dur) t = dur;
+      player.currentTime = t;
+      updateSeekFromVideo();
+      updateTimeLabel();
+    }, { passive: false });
+
     // Buttons
     el('btnPlay').onclick = () => togglePlayPause();
     el('btnBack').onclick = () => { player.currentTime = Math.max(0, player.currentTime - 1.0); updateSeekFromVideo(); };
