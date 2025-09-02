@@ -168,19 +168,34 @@
       el('log').prepend(n);
     }
 
-    function renderQuickLabels() {
+    async function renderQuickLabels() {
       const dl = el('labelsDatalist');
       dl.innerHTML = '';
-      el('quickLabels').innerHTML = '';
+      const container = el('quickLabels');
+      container.innerHTML = '';
+      // Fetch stats to color buttons and show counts
+      let stats = null;
+      try {
+        const r = await fetch(`/api/label_stats?threshold=50&margin=5`);
+        stats = await r.json();
+      } catch (_) { stats = null; }
+      const byLabel = new Map();
+      if (stats && stats.items) {
+        for (const it of stats.items) byLabel.set(it.label, it);
+      }
       lastLabels.forEach((l, idx) => {
         const o = document.createElement('option');
         o.value = l; dl.appendChild(o);
         const b = document.createElement('button');
         const hot = idx < 9 ? ` [${idx + 1}]` : '';
-        b.textContent = `${l}${hot}`;
+        let txt = l + hot;
+        const it = byLabel.get(l);
+        if (it && typeof it.count === 'number') txt = `${l} (${it.count})` + hot;
+        b.textContent = txt;
         b.title = idx < 9 ? `Press ${idx + 1} to export clip with label "${l}"` : l;
         b.onclick = () => { labelInput.value = l; };
-        el('quickLabels').appendChild(b);
+        if (it && it.status) b.classList.add(`status-${it.status}`);
+        container.appendChild(b);
       });
     }
 
@@ -188,7 +203,7 @@
       const r = await fetch('/api/labels');
       const j = await r.json();
       lastLabels = j.labels || [];
-      renderQuickLabels();
+      await renderQuickLabels();
     }
 
     async function refreshVideos() {

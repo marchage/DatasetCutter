@@ -174,6 +174,8 @@ class Settings(BaseModel):
     dataset_root: str = str(DEFAULT_DATASET_ROOT)
     clip_duration: float = 4.0  # seconds
     clip_mode: str = "backward"  # "backward" or "centered" or "range" (I/O marks)
+    # Optional: target clips per label (used by UI coloring; not persisted via POST yet)
+    target_per_label: int = 50
 
 
 class ClipRequest(BaseModel):
@@ -276,6 +278,55 @@ async def update_settings(dataset_root: str = Form(None), clip_duration: float =
 @app.get("/api/labels")
 async def get_labels():
     return {"labels": load_labels()}
+
+
+def _count_clips_in_dir(d: Path) -> int:
+    if not d.is_dir():
+        return 0
+    n = 0
+    for p in d.iterdir():
+        if not p.is_file():
+            continue
+        name = p.name
+        if name.startswith(".") or name.lower().startswith("._"):
+            continue
+        if p.suffix.lower() in ALLOWED_VIDEO_EXTS:
+            n += 1
+    return n
+
+
+@app.get("/api/label_stats")
+async def label_stats(threshold: Optional[int] = None, margin: int = 5):
+    """Return per-label counts and a status for UI coloring.
+
+    Status rules (with given threshold and margin):
+      - count >= threshold + margin: "good"
+      - threshold - margin <= count < threshold + margin: "warn"
+      - count < threshold - margin: "bad"
+    """
+    labels = load_labels()
+    thr = int(threshold if threshold is not None else _current_settings.target_per_label)
+    items = []
+    root = Path(_current_settings.dataset_root) / "Training"
+    total = 0
+    minv = None
+    maxv = None
+    for label in labels:
+        s = sanitize_filename(label)
+        count = _count_clips_in_dir(root / s)
+        total += count
+        minv = count if minv is None else min(minv, count)
+        maxv = count if maxv is None else max(maxv, count)
+        status = "good" if count >= thr + margin else ("warn" if count >= thr - margin else "bad")
+        items.append({"label": label, "sanitized": s, "count": count, "status": status})
+    classes = len(labels)
+    mean = (total / classes) if classes else 0.0
+    return {
+        "threshold": thr,
+        "margin": margin,
+        "summary": {"classes": classes, "total": total, "mean": mean, "min": (minv or 0), "max": (maxv or 0)},
+        "items": items,
+    }
 
 
 @app.post("/api/upload")
