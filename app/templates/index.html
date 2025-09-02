@@ -210,8 +210,8 @@
         const o = document.createElement('option');
         o.value = l; dl.appendChild(o);
         const b = document.createElement('button');
-        // hotkey: 1..9 and 0 for 10th item
-        const hk = idx < 9 ? String(idx + 1) : (idx === 9 ? '0' : '');
+        // hotkey: show 1,2,...,10,11,... (multi-digit supported)
+        const hk = String(idx + 1);
         let txt = l;
         const it = byLabel.get(l);
         if (it && typeof it.count === 'number') txt = `${l} (${it.count})`;
