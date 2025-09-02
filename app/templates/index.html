@@ -210,12 +210,23 @@
         const o = document.createElement('option');
         o.value = l; dl.appendChild(o);
         const b = document.createElement('button');
-        const hot = idx < 9 ? ` [${idx + 1}]` : '';
-        let txt = l + hot;
+        // hotkey: 1..9 and 0 for 10th item
+        const hk = idx < 9 ? String(idx + 1) : (idx === 9 ? '0' : '');
+        let txt = l;
         const it = byLabel.get(l);
-        if (it && typeof it.count === 'number') txt = `${l} (${it.count})` + hot;
+        if (it && typeof it.count === 'number') txt = `${l} (${it.count})`;
+        // label text
         b.textContent = txt;
-        b.title = idx < 9 ? `Press ${idx + 1} to export clip with label "${l}"` : l;
+        // hotkey badge
+        if (hk) {
+          const badge = document.createElement('span');
+          badge.className = 'hotkey-badge';
+          badge.textContent = hk;
+          b.appendChild(badge);
+          b.title = `Press ${hk} to export clip with label "${l}"`;
+        } else {
+          b.title = l;
+        }
         b.onclick = () => { labelInput.value = l; };
         if (it && it.status) b.classList.add(`status-${it.status}`);
         container.appendChild(b);
