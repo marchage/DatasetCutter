@@ -53,6 +53,17 @@
       </div>
     </header>
 
+    <div class="shortcuts shortcuts-banner" aria-label="Keyboard shortcuts">
+      <span class="pill">Space: Play/Pause</span>
+      <span class="pill">Enter: Clip</span>
+      <span class="pill">Digits: Quick Labels (multi-digit OK)</span>
+      <span class="pill">←/→: Seek ±0.25s (Shift=±1s)</span>
+      <span class="pill">J/K/L: 0.5x/1.0x/1.5x</span>
+      <span class="pill">U: Undo</span>
+      <span class="pill">I/O: Mark In/Out</span>
+      <span class="pill">C: Clip Range</span>
+    </div>
+
     <main>
       <section class="left">
         <div class="video-controls">
@@ -91,7 +102,10 @@
 
       <section class="right">
         <div class="labeling">
-          <h3>Label</h3>
+          <div class="label-header">
+            <h3>Label</h3>
+            <div id="labelMiniChart" aria-label="Label counts chart"></div>
+          </div>
           <input id="labelInput" placeholder="Type a label" list="labelsDatalist" />
           <datalist id="labelsDatalist"></datalist>
           <div id="quickLabels"></div>
@@ -101,18 +115,7 @@
       </section>
     </main>
 
-    <footer>
-      <div class="shortcuts shortcuts-footer" aria-label="Keyboard shortcuts">
-        <span class="pill">Space: Play/Pause</span>
-        <span class="pill">Enter: Clip</span>
-        <span class="pill">Digits: Quick Labels (multi-digit OK)</span>
-        <span class="pill">←/→: Seek ±0.25s (Shift=±1s)</span>
-        <span class="pill">J/K/L: 0.5x/1.0x/1.5x</span>
-        <span class="pill">U: Undo</span>
-        <span class="pill">I/O: Mark In/Out</span>
-        <span class="pill">C: Clip Range</span>
-      </div>
-    </footer>
+    <!-- Footer removed; shortcuts moved below header to full width -->
   </div>
 
   <!-- Label modal (autocomplete using existing datalist) -->
@@ -201,6 +204,8 @@
         const r = await fetch(`/api/label_stats?threshold=${thr}&margin=${mar}`);
         stats = await r.json();
       } catch (_) { stats = null; }
+      // Draw mini chart near the header
+      renderLabelMiniChart(stats);
       const byLabel = new Map();
       if (stats && stats.items) {
         for (const it of stats.items) byLabel.set(it.label, it);
@@ -230,6 +235,36 @@
         if (it && it.status) b.classList.add(`status-${it.status}`);
         container.appendChild(b);
       });
+    }
+
+    function renderLabelMiniChart(stats) {
+      const chart = el('labelMiniChart');
+      if (!chart) return;
+      chart.innerHTML = '';
+      const itemsByLabel = new Map();
+      let maxCount = 0;
+      if (stats && stats.items && stats.items.length) {
+        for (const it of stats.items) {
+          itemsByLabel.set(it.label, it);
+          if (typeof it.count === 'number') maxCount = Math.max(maxCount, it.count);
+        }
+      }
+      if (!lastLabels || lastLabels.length === 0) return;
+      const H = 25; // px
+      for (const label of lastLabels) {
+        const it = itemsByLabel.get(label) || { count: 0, status: null };
+        const n = typeof it.count === 'number' ? it.count : 0;
+        const h = maxCount > 0 ? Math.max(2, Math.round((n / maxCount) * H)) : 2;
+        const bar = document.createElement('div');
+        bar.className = 'bar' + (it.status ? ` status-${it.status}` : '');
+        bar.style.height = `${h}px`;
+        bar.title = `${label}: ${n}`;
+        const cnt = document.createElement('span');
+        cnt.className = 'cnt' + (h < 12 ? ' tiny' : '');
+        cnt.textContent = String(n);
+        bar.appendChild(cnt);
+        chart.appendChild(bar);
+      }
     }
 
     async function refreshLabels() {
