@@ -155,6 +155,13 @@ app = FastAPI(title="MP4 Dataset Cutter")
 # Static mounts (from app resources)
 app.mount("/static", StaticFiles(directory=str(APP_ROOT / "app" / "static")), name="static")
 app.mount("/videos", StaticFiles(directory=str(VIDEOS_DIR)), name="videos")
+# Optionally serve repository assets (icons) if present
+try:
+    assets_dir = APP_ROOT / "assets"
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+except Exception:
+    pass
 
 templates = Jinja2Templates(directory=str(APP_ROOT / "app" / "templates"))
 

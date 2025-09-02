@@ -42,6 +42,7 @@ a = Analysis(
     datas=[
         ('app/templates', 'app/templates'),
         ('app/static', 'app/static'),
+    ('assets', 'assets'),
     ] + _extra_datas,
     hiddenimports=['fastapi', 'uvicorn', 'jinja2', 'ffmpeg', 'ffmpeg._run', 'ffmpeg.nodes', 'AppKit', 'Foundation', 'objc'],
     hookspath=[],
