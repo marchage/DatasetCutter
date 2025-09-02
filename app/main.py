@@ -342,13 +342,13 @@ async def label_stats(threshold: Optional[int] = None, margin: Optional[int] = N
         total += count
         minv = count if minv is None else min(minv, count)
         maxv = count if maxv is None else max(maxv, count)
-    status = "good" if count >= thr + mar else ("warn" if count >= thr - mar else "bad")
-    items.append({"label": label, "sanitized": s, "count": count, "status": status})
+        status = "good" if count >= thr + mar else ("warn" if count >= thr - mar else "bad")
+        items.append({"label": label, "sanitized": s, "count": count, "status": status})
     classes = len(labels)
     mean = (total / classes) if classes else 0.0
     return {
-    "threshold": thr,
-    "margin": mar,
+        "threshold": thr,
+        "margin": mar,
         "summary": {"classes": classes, "total": total, "mean": mean, "min": (minv or 0), "max": (maxv or 0)},
         "items": items,
     }
