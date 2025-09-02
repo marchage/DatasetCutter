@@ -183,6 +183,7 @@ class Settings(BaseModel):
     clip_mode: str = "backward"  # "backward" or "centered" or "range" (I/O marks)
     # Optional: target clips per label (used by UI coloring; not persisted via POST yet)
     target_per_label: int = 50
+    margin_per_label: int = 5
 
 
 class ClipRequest(BaseModel):
@@ -270,7 +271,13 @@ async def get_settings():
 
 
 @app.post("/api/settings")
-async def update_settings(dataset_root: str = Form(None), clip_duration: float = Form(None), clip_mode: str = Form(None)):
+async def update_settings(
+    dataset_root: str = Form(None),
+    clip_duration: float = Form(None),
+    clip_mode: str = Form(None),
+    label_threshold: int = Form(None),
+    label_margin: int = Form(None),
+):
     global _current_settings
     if dataset_root:
         _current_settings.dataset_root = dataset_root
@@ -279,6 +286,16 @@ async def update_settings(dataset_root: str = Form(None), clip_duration: float =
         _current_settings.clip_duration = float(clip_duration)
     if clip_mode in {"backward", "centered", "range"}:
         _current_settings.clip_mode = clip_mode
+    if label_threshold is not None:
+        try:
+            _current_settings.target_per_label = int(label_threshold)
+        except Exception:
+            pass
+    if label_margin is not None:
+        try:
+            _current_settings.margin_per_label = int(label_margin)
+        except Exception:
+            pass
     return _current_settings
 
 
@@ -303,7 +320,7 @@ def _count_clips_in_dir(d: Path) -> int:
 
 
 @app.get("/api/label_stats")
-async def label_stats(threshold: Optional[int] = None, margin: int = 5):
+async def label_stats(threshold: Optional[int] = None, margin: Optional[int] = None):
     """Return per-label counts and a status for UI coloring.
 
     Status rules (with given threshold and margin):
@@ -313,6 +330,7 @@ async def label_stats(threshold: Optional[int] = None, margin: int = 5):
     """
     labels = load_labels()
     thr = int(threshold if threshold is not None else _current_settings.target_per_label)
+    mar = int(margin if margin is not None else _current_settings.margin_per_label)
     items = []
     root = Path(_current_settings.dataset_root) / "Training"
     total = 0
@@ -324,13 +342,13 @@ async def label_stats(threshold: Optional[int] = None, margin: int = 5):
         total += count
         minv = count if minv is None else min(minv, count)
         maxv = count if maxv is None else max(maxv, count)
-        status = "good" if count >= thr + margin else ("warn" if count >= thr - margin else "bad")
+    status = "good" if count >= thr + mar else ("warn" if count >= thr - mar else "bad")
         items.append({"label": label, "sanitized": s, "count": count, "status": status})
     classes = len(labels)
     mean = (total / classes) if classes else 0.0
     return {
-        "threshold": thr,
-        "margin": margin,
+    "threshold": thr,
+    "margin": mar,
         "summary": {"classes": classes, "total": total, "mean": mean, "min": (minv or 0), "max": (maxv or 0)},
         "items": items,
     }
