@@ -92,11 +92,10 @@
       <section class="right">
         <div class="labeling">
           <h3>Label</h3>
+          <div class="hint hint-small">Hotkeys: digits for quick labels (supports multi-digit like 10, 11).</div>
           <input id="labelInput" placeholder="Type a label" list="labelsDatalist" />
           <datalist id="labelsDatalist"></datalist>
           <div id="quickLabels"></div>
-          <div class="hint">Hotkeys: digits for quick labels (supports multi-digit like 10, 11). Type the number; it
-            auto-commits, or press '-' / Enter to commit immediately.</div>
         </div>
         <div class="log" id="log"></div>
       </section>
@@ -464,7 +463,7 @@
       if (k === 'c' || k === 'C') { doClip('range'); return; }
       // digit hotkeys: build a multi-digit buffer and auto-commit
       if (k >= '0' && k <= '9') { e.preventDefault(); digitBuffer += k; scheduleDigitCommit(); return; }
-      if (k === '-' && digitBuffer) { e.preventDefault(); commitDigitBuffer(); return; }
+      // '-' quick-commit removed
     });
 
     // Boot
