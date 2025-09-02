@@ -6,7 +6,9 @@ A lightweight local web app to speed up dataset creation:
 - Press Enter to export a 4-second clip (configurable) around the current time.
 - Press Space to play/pause like QuickTime.
 - Prompt for a label (autocomplete from previous labels), then export into a Create ML Action Classifier folder structure: `DatasetRoot/Training/<Label>/<clip>.mp4`.
-- Quick undo for the last exported clip.
+- Quick-label hotkeys with digits (multi-digit supported, e.g. 10, 11).
+- Color-coded labels and a mini bar chart to guide dataset balancing.
+- Multi-level undo (up to 10 clips).
 
 Runs locally on macOS (or any OS with Python + ffmpeg). Default data lives in `~/DatasetCutter`.
 
@@ -16,14 +18,24 @@ Runs locally on macOS (or any OS with Python + ffmpeg). Default data lives in `~
 - Keyboard shortcuts:
   - Space: Play/Pause
   - Enter: Export clip and prompt for label
+  - Digits: Quick-label export (supports multi-digit like 10, 11). Type the number; it auto-commits. If a number is buffered, Enter commits it.
   - Left/Right: Seek ±0.25s (hold Shift for ±1s)
   - J/K/L: 0.5x / 1.0x / 1.5x speed
-  - U: Undo last exported clip
+  - U: Undo (multi-level stack up to 10)
   - C: Clip between in/out marks (if set)
   - I/O: Set mark-in / mark-out
 - Clip mode: last N seconds or centered on current time
-- Label autocomplete from previously used labels; quick-label buttons
+- Label autocomplete from previously used labels; quick-label buttons with counts
 - Create ML Action Classifier folder layout (video-based): `Training/<Label>/*.mp4`
+
+### Label balancing helpers
+
+- Quick-label buttons are color-coded based on per-label counts and your target threshold ± margin:
+  - Good (green): count ≥ threshold + margin
+  - Warn (yellow): threshold − margin ≤ count < threshold + margin
+  - Bad (red): count < threshold − margin
+- Configure Threshold and Margin in Settings. Click “Refresh Stats” to recompute.
+- A compact mini bar chart (25px tall) near the Label header shows per-label counts by height with the same colors.
 
 ## Download (macOS)
 
@@ -92,9 +104,9 @@ Data & logs:
 
 1. Optionally set the Dataset Root (defaults to `~/DatasetCutter/dataset/`). The app will create `Training/` inside it.
 2. Upload an MP4 via the “Open Video” button (local file is copied to `data/videos/`).
-3. Play/scrub. When you want to capture an action, press Space.
-4. Enter/select a label. The clip is exported to `DatasetRoot/Training/<Label>/`.
-5. Use Undo if needed.
+3. Play/scrub. When you want to capture an action, press Space (or press digits to choose a quick label).
+4. Enter/select a label or use a quick label. The clip is exported to `DatasetRoot/Training/<Label>/`.
+5. Use Undo if needed (up to 10 steps).
 
 ## Create ML Notes
 
@@ -159,6 +171,8 @@ git tag -a v1.0.0 -m "Release v1.0.0"
 git push origin v1.0.0
 ```
 
+Recent tags will automatically publish an updated app with UI improvements like the shortcuts banner, label mini chart, and color-coded quick labels.
+
 ### App window in dev
 
 You can show the same small window while developing by setting `SHOW_WINDOW=1` and running `python entry.py`.
@@ -198,6 +212,16 @@ Run the helper script:
 ./bin/doctor.sh
 ```
 It reports Python/venv, ffmpeg availability, and the last server log lines.
+
+### Dataset analysis helper
+
+From the repo root, a helper script surfaces labels that need attention (defaults to `~/DatasetCutter/dataset/Training`):
+
+```bash
+python bin/dataset_focus.py
+```
+
+Options include extra file extensions and a top-N view. This mirrors the in-app label stats/colouring logic.
 
 ## Privacy
 
