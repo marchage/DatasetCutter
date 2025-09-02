@@ -48,6 +48,7 @@
           <input type="checkbox" id="toggleControls" />
         </label>
         <button id="saveSettings">Save</button>
+        <button id="refreshStats" title="Recompute counts and recolor quick labels">Refresh Stats</button>
         <button id="quitServer" title="Stop the local DatasetCutter server">Quit Server</button>
       </div>
     </header>
@@ -128,7 +129,7 @@
   </div>
 
   <script>
-  const settings = { dataset_root: '', clip_duration: 4.0, clip_mode: 'backward', target_per_label: 50, margin_per_label: 5 };
+    const settings = { dataset_root: '', clip_duration: 4.0, clip_mode: 'backward', target_per_label: 50, margin_per_label: 5 };
     const el = (id) => document.getElementById(id);
     const player = el('player');
     const seek = el('seek');
@@ -158,27 +159,28 @@
       settings.dataset_root = s.dataset_root;
       settings.clip_duration = s.clip_duration;
       settings.clip_mode = s.clip_mode;
-  settings.target_per_label = s.target_per_label || settings.target_per_label;
-  settings.margin_per_label = s.margin_per_label || settings.margin_per_label;
+      settings.target_per_label = s.target_per_label || settings.target_per_label;
+      settings.margin_per_label = s.margin_per_label || settings.margin_per_label;
       el('datasetRoot').value = settings.dataset_root;
       el('clipDuration').value = settings.clip_duration;
       el('clipMode').value = settings.clip_mode;
-  el('labelThreshold').value = settings.target_per_label;
-  el('labelMargin').value = settings.margin_per_label;
+      el('labelThreshold').value = settings.target_per_label;
+      el('labelMargin').value = settings.margin_per_label;
     }
     async function saveSettings() {
       const fd = new FormData();
       fd.append('dataset_root', el('datasetRoot').value);
       fd.append('clip_duration', el('clipDuration').value);
       fd.append('clip_mode', el('clipMode').value);
-  fd.append('label_threshold', el('labelThreshold').value);
-  fd.append('label_margin', el('labelMargin').value);
-  const r = await fetch('/api/settings', { method: 'POST', body: fd });
+      fd.append('label_threshold', el('labelThreshold').value);
+      fd.append('label_margin', el('labelMargin').value);
+      const r = await fetch('/api/settings', { method: 'POST', body: fd });
       const s = await r.json();
       settings.dataset_root = s.dataset_root;
       settings.clip_duration = s.clip_duration;
       settings.clip_mode = s.clip_mode;
       log(`Saved settings`);
+      await renderQuickLabels();
     }
 
     function log(msg) {
@@ -187,7 +189,7 @@
       el('log').prepend(n);
     }
 
-  async function renderQuickLabels() {
+    async function renderQuickLabels() {
       const dl = el('labelsDatalist');
       dl.innerHTML = '';
       const container = el('quickLabels');
@@ -366,6 +368,7 @@
 
     // Event wiring
     el('saveSettings').onclick = saveSettings;
+    el('refreshStats').onclick = async () => { await renderQuickLabels(); log('Stats refreshed'); };
     el('quitServer').onclick = async () => {
       try {
         await fetch('/api/quit', { method: 'POST' });
