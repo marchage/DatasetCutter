@@ -5,6 +5,7 @@ import shutil
 import time
 import sys
 from pathlib import Path
+import json
 from typing import List, Optional
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, BackgroundTasks
@@ -319,6 +320,45 @@ def _count_clips_in_dir(d: Path) -> int:
     return n
 
 
+# --- Media compatibility helpers ---
+def _ffprobe_json(path: Path) -> Optional[dict]:
+    try:
+        ffprobe = (FFMPEG_BIN_PATH or shutil.which('ffmpeg') or 'ffmpeg').replace('ffmpeg', 'ffprobe')
+        if not ffprobe:
+            ffprobe = 'ffprobe'
+        cmd = [ffprobe, '-v', 'error', '-print_format', 'json', '-show_streams', '-show_format', str(path)]
+        p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if p.returncode != 0:
+            return None
+        return json.loads(p.stdout.decode(errors='replace') or '{}')
+    except Exception:
+        return None
+
+
+def _is_create_ml_friendly(meta: Optional[dict]) -> bool:
+    if not meta:
+        return False
+    streams = meta.get('streams') or []
+    vstreams = [s for s in streams if s.get('codec_type') == 'video']
+    if not vstreams:
+        return False
+    v = vstreams[0]
+    codec = (v.get('codec_name') or '').lower()
+    pix = (v.get('pix_fmt') or '').lower()
+    try:
+        w = int(v.get('width') or 0); h = int(v.get('height') or 0)
+    except Exception:
+        w = h = 0
+    # Create ML-friendly baseline: H.264 + yuv420p + even dimensions
+    if codec != 'h264':
+        return False
+    if pix and pix != 'yuv420p':
+        return False
+    if (w % 2 != 0) or (h % 2 != 0):
+        return False
+    return True
+
+
 @app.get("/api/label_stats")
 async def label_stats(threshold: Optional[int] = None, margin: Optional[int] = None):
     """Return per-label counts and a status for UI coloring.
@@ -464,6 +504,48 @@ async def make_clip(req: ClipRequest):
                 _log("ffmpeg vt hw cmd: " + " ".join(cmd3))
                 _log("stderr3:\n" + err3)
                 raise HTTPException(500, "ffmpeg failed to export clip")
+    else:
+        # Copy succeeded. Verify compatibility; re-encode if not Create ML-friendly.
+        try:
+            meta = _ffprobe_json(out_path)
+            if not _is_create_ml_friendly(meta):
+                _log(f"Post-copy not friendly; re-encoding {out_path}")
+                tmp = out_path.with_suffix(out_path.suffix + '.tmp')
+                cmd2 = [
+                    ffbin, '-hide_banner', '-nostdin',
+                    '-i', str(out_path),
+                    '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',
+                    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20',
+                    '-c:a', 'aac', '-movflags', '+faststart',
+                    '-y', str(tmp)
+                ]
+                rc2, err2 = _run(cmd2)
+                if rc2 != 0:
+                    cmd3 = [
+                        ffbin, '-hide_banner', '-nostdin',
+                        '-i', str(out_path),
+                        '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',
+                        '-c:v', 'h264_videotoolbox', '-b:v', '2M',
+                        '-c:a', 'aac', '-movflags', '+faststart',
+                        '-y', str(tmp)
+                    ]
+                    rc3, err3 = _run(cmd3)
+                    if rc3 != 0:
+                        _log("post-copy reencode stderr2:\n" + err2)
+                        _log("post-copy vt stderr3:\n" + err3)
+                        raise HTTPException(500, "ffmpeg failed to normalize clip")
+                # replace original
+                try:
+                    out_path.unlink(missing_ok=True)
+                except TypeError:
+                    # Python <3.8 fallback
+                    if out_path.exists():
+                        out_path.unlink()
+                tmp.rename(out_path)
+        except HTTPException:
+            raise
+        except Exception as e:
+            _log(f"compat check error: {e}")
 
     # Verify output exists and is non-empty
     if not out_path.exists() or out_path.stat().st_size == 0:

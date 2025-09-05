@@ -223,6 +223,23 @@ python bin/dataset_focus.py
 
 Options include extra file extensions and a top-N view. This mirrors the in-app label stats/colouring logic.
 
+### Repair training videos for Create ML
+
+If Create ML reports “Failed to complete video decoding”, normalize your clips using the repair script. It remuxes or re-encodes to H.264 (yuv420p), even dimensions, +faststart, and optional constant frame rate.
+
+```bash
+# Dry run first
+python bin/repair_dataset.py --root ~/DatasetCutter/dataset/Training --dry-run
+
+# Then actually repair (defaults to 30 fps CFR, creates .bak backups)
+python bin/repair_dataset.py --root ~/DatasetCutter/dataset/Training --cfr 30
+```
+
+Notes:
+- Falls back to h264_videotoolbox on macOS if libx264 is unavailable.
+- Keeps audio if possible; converts to AAC when needed.
+- Use `--backup-ext ""` to skip backups (replace originals in place).
+
 ## Privacy
 
 Everything runs locally. Videos and clips are stored under `~/DatasetCutter` by default (unless you change paths).
