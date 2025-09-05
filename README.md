@@ -3,7 +3,7 @@
 A lightweight local web app to speed up dataset creation:
 
 - Play MP4 videos, scrub the timeline, and use handy shortcuts.
-- Press Enter to export a 4-second clip (configurable) around the current time.
+- Press Enter to export a 5-second clip (configurable) around the current time.
 - Press Space to play/pause like QuickTime.
 - Prompt for a label (autocomplete from previous labels), then export into a Create ML Action Classifier folder structure: `DatasetRoot/Training/<Label>/<clip>.mp4`.
 - Quick-label hotkeys with digits (multi-digit supported, e.g. 10, 11).

@@ -179,7 +179,7 @@ async def ensure_ranges(req: Request, call_next):
 
 class Settings(BaseModel):
     dataset_root: str = str(DEFAULT_DATASET_ROOT)
-    clip_duration: float = 4.0  # seconds
+    clip_duration: float = 5.0  # seconds
     clip_mode: str = "backward"  # "backward" or "centered" or "range" (I/O marks)
     # Optional: target clips per label (used by UI coloring; not persisted via POST yet)
     target_per_label: int = 50
