@@ -26,7 +26,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any
 
 
 ALLOWED_EXTS = {".mp4", ".mov", ".m4v"}
@@ -213,6 +213,9 @@ def main():
     parser.add_argument("--cfr", type=int, default=30, help="Force constant frame rate (e.g., 30). Set 0 to keep source VFR")
     parser.add_argument("--dry-run", action="store_true", help="Only print actions; don’t modify files")
     parser.add_argument("--backup-ext", default=".bak", help="Backup extension for originals (set empty string to delete originals)")
+    parser.add_argument("--use-cache", action="store_true", default=True, help="Skip files seen unchanged in previous run (uses .repair_cache.json)")
+    parser.add_argument("--reset-cache", action="store_true", help="Ignore and overwrite any previous cache")
+    parser.add_argument("--only-newer", action="store_true", help="Only process files newer than last run marker (.repair_marker)")
     args = parser.parse_args()
 
     root: Path = args.root
@@ -225,21 +228,72 @@ def main():
     ffbin = find_ffmpeg()
     print(f"Using ffmpeg: {ffbin}")
 
+    # Cache and marker paths
+    cache_path = root / ".repair_cache.json"
+    marker_path = root / ".repair_marker"
+    cache: Dict[str, Any] = {}
+    if args.use_cache and not args.reset_cache and cache_path.exists():
+        try:
+            cache = json.loads(cache_path.read_text(encoding="utf-8")) or {}
+        except Exception:
+            cache = {}
+    watermark = None
+    if args.only_newer and marker_path.exists():
+        try:
+            watermark = marker_path.stat().st_mtime
+            print(f"Processing only files newer than marker: {marker_path} (mtime={watermark})")
+        except Exception:
+            watermark = None
+
     total = 0
     repaired = 0
     skipped = 0
+    skipped_cached = 0
+    skipped_old = 0
     for cls in sorted([p for p in root.iterdir() if p.is_dir()]):
         for vid in sorted(cls.iterdir()):
             if not vid.is_file() or vid.suffix.lower() not in exts:
                 continue
             total += 1
+            # Skip if older than watermark
+            try:
+                st = vid.stat()
+            except FileNotFoundError:
+                continue
+            if watermark and st.st_mtime <= watermark:
+                skipped_old += 1
+                print(f"[SKIP-OLD] {vid}")
+                continue
+            # Skip if unchanged and in cache as ok
+            rel = str(vid.relative_to(root))
+            prev = cache.get(rel)
+            if args.use_cache and prev and isinstance(prev, dict):
+                if prev.get("size") == st.st_size and prev.get("mtime") == int(st.st_mtime) and prev.get("ok") is True:
+                    skipped_cached += 1
+                    # Keep quiet for speed; uncomment to see
+                    # print(f"[SKIP-CACHED] {vid}")
+                    continue
+
             ok = repair_file(ffbin, vid, cfr=(args.cfr if args.cfr and args.cfr > 0 else None), dry_run=args.dry_run, backup_ext=args.backup_ext)
             if ok:
                 repaired += 1
+                # Update cache entry
+                try:
+                    st2 = vid.stat()
+                    cache[rel] = {"size": st2.st_size, "mtime": int(st2.st_mtime), "ok": True}
+                except Exception:
+                    pass
             else:
                 skipped += 1
+    # Save cache and update marker
+    try:
+        if args.use_cache:
+            cache_path.write_text(json.dumps(cache, indent=2), encoding="utf-8")
+        marker_path.touch()
+    except Exception:
+        pass
 
-    print(f"\nDone. processed={total} repaired={repaired} failed={skipped}")
+    print(f"\nDone. processed={total} repaired={repaired} skipped_cached={skipped_cached} skipped_old={skipped_old} failed={skipped}")
 
 
 if __name__ == "__main__":
