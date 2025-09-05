@@ -185,6 +185,21 @@ You can show the same small window while developing by setting `SHOW_WINDOW=1` a
 - On macOS, Homebrew ffmpeg can break due to missing dylibs (e.g., `libjxl`). Using a static ffmpeg in `~/DatasetCutter/bin/ffmpeg` avoids this.
 - Check logs in `~/DatasetCutter/data/server.log` for ffmpeg path and errors.
 
+#### Export normalization controls
+
+New clips are normalized for Create ML by default. You can tweak via env vars before launching:
+
+```bash
+# Always re-encode (safe). Set to 0 to try a fast stream copy first.
+export DC_ALWAYS_REENCODE=1
+
+# Force constant frame rate (set 0 to keep source VFR)
+export DC_EXPORT_CFR=30
+
+# Drop audio tracks on export (helps if audio codecs cause issues)
+export DC_EXPORT_DROP_AUDIO=0
+```
+
 ### Port already in use
 
 - The dev command `uvicorn ... --port 8000` will fail if 8000 is used. Either kill the other process or pick a different port.

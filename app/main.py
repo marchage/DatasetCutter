@@ -103,6 +103,15 @@ VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
 CLIPS_DIR.mkdir(parents=True, exist_ok=True)
 (DEFAULT_DATASET_ROOT / "Training").mkdir(parents=True, exist_ok=True)
 
+# Export normalization controls (can be overridden by env vars)
+EXPORT_ALWAYS_REENCODE = os.environ.get("DC_ALWAYS_REENCODE", "1") not in {"0", "false", "False"}
+try:
+    _cfr_env = os.environ.get("DC_EXPORT_CFR", "30")
+    EXPORT_CFR = int(_cfr_env) if _cfr_env else 30
+except Exception:
+    EXPORT_CFR = 30
+EXPORT_DROP_AUDIO = os.environ.get("DC_EXPORT_DROP_AUDIO", "0") in {"1", "true", "True"}
+
 # Filenames to exclude from listings (case-insensitive)
 EXCLUDED_META_NAMES = {
     ".ds_store",  # macOS Finder metadata
@@ -463,15 +472,18 @@ async def make_clip(req: ClipRequest):
         return p.returncode, p.stderr.decode(errors='replace')
 
     ffbin = FFMPEG_BIN_PATH or shutil.which('ffmpeg') or 'ffmpeg'
-    # Attempt 1: fast stream copy (may fail if cut is not at keyframe)
-    cmd1 = [
-        ffbin, '-hide_banner', '-nostdin',
-        '-ss', f'{start:.3f}', '-i', str(src),
-        '-t', f'{seg_dur:.3f}',
-        '-c', 'copy', '-movflags', '+faststart',
-        '-y', str(out_path)
-    ]
-    rc1, err1 = _run(cmd1)
+    rc1 = -1
+    err1 = ''
+    if not EXPORT_ALWAYS_REENCODE:
+        # Attempt 1: fast stream copy (may fail if cut is not at keyframe or incompatible pixel format)
+        cmd1 = [
+            ffbin, '-hide_banner', '-nostdin',
+            '-ss', f'{start:.3f}', '-i', str(src),
+            '-t', f'{seg_dur:.3f}',
+            '-c', 'copy', '-movflags', '+faststart',
+            '-y', str(out_path)
+        ]
+        rc1, err1 = _run(cmd1)
     if rc1 != 0:
         # Attempt 2: re-encode with sane defaults and even-dimension safeguard
         cmd2 = [
@@ -480,7 +492,10 @@ async def make_clip(req: ClipRequest):
             '-t', f'{seg_dur:.3f}',
             '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',
             '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20',
-            '-c:a', 'aac', '-movflags', '+faststart',
+            '-profile:v', 'main', '-level', '4.1', '-pix_fmt', 'yuv420p',
+            *(['-r', str(EXPORT_CFR)] if EXPORT_CFR and EXPORT_CFR > 0 else []),
+            *( ['-an'] if EXPORT_DROP_AUDIO else ['-c:a', 'aac'] ),
+            '-movflags', '+faststart',
             '-y', str(out_path)
         ]
         rc2, err2 = _run(cmd2)
@@ -491,8 +506,10 @@ async def make_clip(req: ClipRequest):
                 '-ss', f'{start:.3f}', '-i', str(src),
                 '-t', f'{seg_dur:.3f}',
                 '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',
-                '-c:v', 'h264_videotoolbox', '-b:v', '2M',
-                '-c:a', 'aac', '-movflags', '+faststart',
+                '-c:v', 'h264_videotoolbox', '-b:v', '2M', '-pix_fmt', 'yuv420p',
+                *(['-r', str(EXPORT_CFR)] if EXPORT_CFR and EXPORT_CFR > 0 else []),
+                *( ['-an'] if EXPORT_DROP_AUDIO else ['-c:a', 'aac'] ),
+                '-movflags', '+faststart',
                 '-y', str(out_path)
             ]
             rc3, err3 = _run(cmd3)
@@ -516,7 +533,10 @@ async def make_clip(req: ClipRequest):
                     '-i', str(out_path),
                     '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',
                     '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20',
-                    '-c:a', 'aac', '-movflags', '+faststart',
+                    '-profile:v', 'main', '-level', '4.1', '-pix_fmt', 'yuv420p',
+                    *(['-r', str(EXPORT_CFR)] if EXPORT_CFR and EXPORT_CFR > 0 else []),
+                    *( ['-an'] if EXPORT_DROP_AUDIO else ['-c:a', 'aac'] ),
+                    '-movflags', '+faststart',
                     '-y', str(tmp)
                 ]
                 rc2, err2 = _run(cmd2)
@@ -525,8 +545,10 @@ async def make_clip(req: ClipRequest):
                         ffbin, '-hide_banner', '-nostdin',
                         '-i', str(out_path),
                         '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',
-                        '-c:v', 'h264_videotoolbox', '-b:v', '2M',
-                        '-c:a', 'aac', '-movflags', '+faststart',
+                        '-c:v', 'h264_videotoolbox', '-b:v', '2M', '-pix_fmt', 'yuv420p',
+                        *(['-r', str(EXPORT_CFR)] if EXPORT_CFR and EXPORT_CFR > 0 else []),
+                        *( ['-an'] if EXPORT_DROP_AUDIO else ['-c:a', 'aac'] ),
+                        '-movflags', '+faststart',
                         '-y', str(tmp)
                     ]
                     rc3, err3 = _run(cmd3)
